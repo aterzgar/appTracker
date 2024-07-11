@@ -1,0 +1,12 @@
+#ifndef APPLICATION_MANAGER_H
+#define APPLICATION_MANAGER_H
+
+#include <sqlite3.h>
+#include <string>
+
+void add_application(sqlite3* DB);
+void display_applications(sqlite3* DB);
+void delete_application(sqlite3* DB);
+int display_callback(void* NotUsed, int argc, char** argv, char** azColName);
+
+#endif // APPLICATION_MANAGER_H
