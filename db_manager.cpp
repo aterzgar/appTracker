@@ -5,7 +5,6 @@ using namespace std;
 
 sqlite3* createDB(const char *s){
     sqlite3* DB;
-    
     int rc = sqlite3_open(s, &DB);
     if (rc) {
         cerr << "Can't open database: " << sqlite3_errmsg(DB) << endl;

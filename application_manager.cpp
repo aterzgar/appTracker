@@ -6,16 +6,43 @@ void add_application(sqlite3* DB){
     string companyName, applicationDate, position, contactPerson, status, notes;
     cout << "Enter company name: ";
     getline(cin, companyName);
+    if (companyName.empty()){
+        cout << "Error: Missing required field 'company name'" << endl;
+        cout << "Enter company name: ";
+        getline(cin, companyName);
+    }
+    
     cout << "Enter application date (YYYY-MM-DD): ";
     getline(cin, applicationDate);
+    if (applicationDate.empty()){
+        cout << "Error: Missing required field 'application date'" << endl;
+        cout << "Enter application date (YYYY-MM-DD): ";
+        getline(cin, applicationDate);
+    }
     cout << "Enter position: ";
     getline(cin, position);
+    if (position.empty()){
+        cout << "Error: Missing required field 'position'" << endl;
+        return;
+    }
     cout << "Enter contact person: ";
     getline(cin, contactPerson);
+    if(contactPerson.empty()){
+        cout << "Error: Missing required field 'contact person'" << endl;
+        return;
+    }
     cout << "Enter status: ";
     getline(cin, status);
+    if(status.empty()){
+        cout << "Error: Missing required field 'status'" << endl;
+        return;
+    }
     cout << "Enter notes: ";
     getline(cin, notes);
+    if(notes.empty()){
+        cout << "Error: Missing required field 'notes'" << endl;
+        return;
+    }
 
     string sqlInsert = "INSERT INTO APPLICATION_TRACKER (COMPANY_NAME, APPLICATION_DATE, POSITION, CONTACT_PERSON, STATUS, NOTES) VALUES ('" +
                        companyName + "', '" +
