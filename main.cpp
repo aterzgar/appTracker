@@ -28,7 +28,6 @@ int main() {
         if (cin.fail()){
             cout <<"Error" << endl;
             cin.clear();
-            cin >> choice;
         }
         cin.ignore(); // to handle the newline character after entering choice
 

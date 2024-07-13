@@ -13,5 +13,3 @@ A command-line application to track job applications. This project uses SQLite f
 - CMake 3.10 or higher
 - A C++ compiler (GCC, Clang)
 - SQLite3 development libraries
-
-

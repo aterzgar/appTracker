@@ -8,16 +8,13 @@ void add_application(sqlite3* DB){
     getline(cin, companyName);
     if (companyName.empty()){
         cout << "Error: Missing required field 'company name'" << endl;
-        cout << "Enter company name: ";
-        getline(cin, companyName);
+        return;
     }
-    
     cout << "Enter application date (YYYY-MM-DD): ";
     getline(cin, applicationDate);
     if (applicationDate.empty()){
         cout << "Error: Missing required field 'application date'" << endl;
-        cout << "Enter application date (YYYY-MM-DD): ";
-        getline(cin, applicationDate);
+        return;
     }
     cout << "Enter position: ";
     getline(cin, position);
