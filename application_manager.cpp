@@ -2,9 +2,29 @@
 #include <iostream>
 using namespace std;
 
+bool check_id(sqlite3 *DB, int id){
+    string sqlCheck = "SELECT 1 FROM APPLICATION_TRACKER WHERE ID = ? LIMIT 1;";
+    sqlite3_stmt* stmt;
+
+    int rc = sqlite3_prepare_v2(DB, sqlCheck.c_str(), -1, &stmt, nullptr);
+    if(rc != SQLITE_OK){
+        cerr << "SQL Error: " << sqlite3_errmsg(DB) << endl;
+        return false;
+    }
+
+    sqlite3_bind_int(stmt, 1, id);
+
+    rc = sqlite3_step(stmt);
+    bool exists = (rc == SQLITE_ROW);
+
+    sqlite3_finalize(stmt);
+    return exists;
+}
+
 void add_application(sqlite3* DB){
     string companyName, applicationDate, position, contactPerson, status, notes;
     cout << "Enter company name: ";
+    cin.ignore(); // Clear input buffer before using getline
     getline(cin, companyName);
     if (companyName.empty()){
         cout << "Error: Missing required field 'company name'" << endl;
@@ -73,15 +93,20 @@ void delete_application(sqlite3* DB) {
     int id;
     cout << "Enter the ID of the application to delete: ";
     cin >> id;
+    cin.ignore();  // Clear the input buffer
 
-    string sqlDelete = "DELETE FROM APPLICATION_TRACKER WHERE ID = " + to_string(id) + ";";
-    char *errMsg = 0;
-    int rc = sqlite3_exec(DB, sqlDelete.c_str(), nullptr, 0, &errMsg);
-    if (rc != SQLITE_OK) {
-        cerr << "SQL error: " << errMsg << endl;
-        sqlite3_free(errMsg);
-    } else {
-        cout << "Record deleted successfully" << endl;
+    if(check_id(DB, id)){
+        string sqlDelete = "DELETE FROM APPLICATION_TRACKER WHERE ID = " + to_string(id) + ";";
+        char *errMsg = 0;
+        int rc = sqlite3_exec(DB, sqlDelete.c_str(), nullptr, 0, &errMsg);
+        if (rc != SQLITE_OK) {
+            cerr << "SQL error: " << errMsg << endl;
+            sqlite3_free(errMsg);
+        } else {
+            cout << "Record deleted successfully" << endl;
+        }    
+    }else {
+        cout << "Record with ID " << id << " does not exist." << endl;
     }
 }
 

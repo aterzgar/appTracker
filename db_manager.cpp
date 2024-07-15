@@ -23,19 +23,18 @@ sqlite3* createDB(const char *s){
     char *errMsg = 0;
     rc = sqlite3_exec(DB, sql, nullptr, 0, &errMsg);
     if (rc != SQLITE_OK) {
-        std::cerr << "SQL error: " << errMsg << std::endl;
+        std::cerr << "SQL error: " << errMsg << endl;
         sqlite3_free(errMsg);
         sqlite3_close(DB);
         return nullptr;
     }
-    cout << "Database successfully initialized!" << std::endl;
+    cout << "Database successfully initialized!" << endl;
     return DB;
 }
 
 void close_db(sqlite3* DB){
     sqlite3_close(DB);
 }
-
 
 int execute_sql(sqlite3* db, const char* sql, int (*callback)(void*, int, char**, char**), void* data, char** errMsg) {
     int rc = sqlite3_exec(db, sql, callback, data, errMsg);
