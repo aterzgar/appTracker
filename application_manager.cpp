@@ -1,6 +1,13 @@
 #include "application_manager.h"
 #include <iostream>
+#include <string>
+#include <regex>
 using namespace std;
+
+bool isValid_DateTime(const string& date) {
+    const regex pattern("^([0-9]{4})-((01|02|03|04|05|06|07|08|09|10|11|12))-([0-2][0-9]|3[01])$");
+    return regex_match(date, pattern);
+}
 
 bool check_id(sqlite3 *DB, int id){
     string sqlCheck = "SELECT 1 FROM APPLICATION_TRACKER WHERE ID = ? LIMIT 1;";
@@ -32,8 +39,8 @@ void add_application(sqlite3* DB){
     }
     cout << "Enter application date (YYYY-MM-DD): ";
     getline(cin, applicationDate);
-    if (applicationDate.empty()){
-        cout << "Error: Missing required field 'application date'" << endl;
+    if (!isValid_DateTime(applicationDate)){
+        cout << "Error: Invalid date format" << endl;
         return;
     }
     cout << "Enter position: ";
