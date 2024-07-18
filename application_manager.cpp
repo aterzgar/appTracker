@@ -2,11 +2,39 @@
 #include <iostream>
 #include <string>
 #include <regex>
+#include <fstream>
+
 using namespace std;
 
 bool isValid_DateTime(const string& date) {
     const regex pattern("^([0-9]{4})-((01|02|03|04|05|06|07|08|09|10|11|12))-([0-2][0-9]|3[01])$");
     return regex_match(date, pattern);
+}
+
+bool is_duplicate_entry(sqlite3* db, const string& companyName, const string& applicationDate, const string& position, const string& contactPerson, const string& status) {
+    string sqlQuery = "SELECT COUNT(*) FROM APPLICATION_TRACKER WHERE COMPANY_NAME = '" + companyName +
+                      "' AND APPLICATION_DATE = '" + applicationDate +
+                      "' AND POSITION = '" + position +
+                      "' AND CONTACT_PERSON = '" + contactPerson +
+                      "' AND STATUS = '" + status + "';";
+    char *errMsg = 0;
+    int count = 0;
+
+    auto callback = [](void* data, int argc, char** argv, char** azColName) -> int {
+        int* count = static_cast<int*>(data);
+        if (argc > 0 && argv[0]) {
+            *count = stoi(argv[0]);
+        }
+        return 0;
+    };
+
+    int rc = sqlite3_exec(db, sqlQuery.c_str(), callback, &count, &errMsg);
+    if (rc != SQLITE_OK) {
+        cerr << "SQL error: " << errMsg << endl;
+        sqlite3_free(errMsg);
+        return false;
+    }
+    return count > 0;
 }
 
 bool check_id(sqlite3 *DB, int id){
@@ -65,6 +93,11 @@ void add_application(sqlite3* DB){
     getline(cin, notes);
     if(notes.empty()){
         cout << "Error: Missing required field 'notes'" << endl;
+        return;
+    }
+
+    if (is_duplicate_entry(DB, companyName, applicationDate, position, contactPerson, status)) {
+        cout << "Error: Duplicate entry" << endl;
         return;
     }
 
