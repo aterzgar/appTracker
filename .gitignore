@@ -1,3 +1,6 @@
 .qodo
 /build
 build.sh
+/build_tests
+CMakeLists.txt
+TEST_RESULTS.md

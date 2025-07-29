@@ -1,0 +1,45 @@
+name: CV Tracker Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          cmake \
+          qt5-default \
+          qtbase5-dev \
+          qtbase5-dev-tools \
+          libsqlite3-dev \
+          pkg-config
+    
+    - name: Build Main Project
+      run: |
+        mkdir build
+        cd build
+        cmake ..
+        make -j$(nproc)
+    
+    - name: Run Tests
+      run: |
+        chmod +x ./run_tests.sh
+        ./run_tests.sh
+    
+    - name: Upload Test Results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: test-results
+        path: build_tests/

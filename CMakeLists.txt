@@ -48,3 +48,11 @@ target_compile_options(cvTracker PRIVATE ${SQLITE3_CFLAGS_OTHER})
 set_target_properties(cvTracker PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
+
+# Option to build tests
+option(BUILD_TESTS "Build the test suite" OFF)
+
+if(BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
