@@ -3,9 +3,6 @@
 
 #include <string>
 #include <vector>
-
-// Forward declaration is not enough for pointer manipulation with sqlite3;
-// we need to include it for sqlite3* and binding.
 #include <sqlite3.h>
 
 /**

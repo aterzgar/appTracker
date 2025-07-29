@@ -38,19 +38,32 @@ ANALYTICS_TEST_RESULT=0
 LOGIC_TEST_RESULT=0
 
 # Function to run tests and extract detailed information
+# Function to run tests and extract detailed information
 run_test() {
     local test_exe=$1
     local test_name=$2
-    local output_file="${test_name}_output.log"
+    local output_file="${test_name// /_}_output.log"  # Replace spaces with underscores
     
     echo "Executing $test_name..."
-    $test_exe -v2 | tee $output_file
+    $test_exe -v2 | tee "$output_file"
     local result=$?
     
-    # Extract test summary information
-    local passed=$(grep -o '[0-9]* passed' $output_file | awk '{print $1}')
-    local failed=$(grep -o '[0-9]* failed' $output_file | awk '{print $1}')
-    local skipped=$(grep -o '[0-9]* skipped' $output_file | awk '{print $1}')
+    # Extract test summary information from the "Totals:" line
+    local totals_line=$(grep "^Totals:" "$output_file")
+    local passed=0
+    local failed=0
+    local skipped=0
+    
+    if [ -n "$totals_line" ]; then
+        passed=$(echo "$totals_line" | grep -o '[0-9]\+ passed' | grep -o '[0-9]\+')
+        failed=$(echo "$totals_line" | grep -o '[0-9]\+ failed' | grep -o '[0-9]\+')
+        skipped=$(echo "$totals_line" | grep -o '[0-9]\+ skipped' | grep -o '[0-9]\+')
+        
+        # Set defaults if not found
+        passed=${passed:-0}
+        failed=${failed:-0}
+        skipped=${skipped:-0}
+    fi
     
     # Save detailed information
     echo "$test_name: $passed passed, $failed failed, $skipped skipped (Exit code: $result)" >> test_summary.txt
@@ -58,7 +71,7 @@ run_test() {
     # Extract failed test details for later reporting
     if [ "$result" -ne 0 ]; then
         echo "Failed tests in $test_name:" >> failed_tests.txt
-        grep -B 1 -A 3 "FAIL" $output_file >> failed_tests.txt
+        grep -B 1 -A 3 "FAIL" "$output_file" >> failed_tests.txt
         echo "" >> failed_tests.txt
     fi
     
@@ -98,24 +111,59 @@ if [ -d "./bin" ] && [ -f "./bin/test_db_manager" ] && [ -f "./bin/test_analytic
     fi
     
     echo
-    echo "=== Test Information ==="
-    echo "Test executables located in: ./bin/"
-    echo "Build directory: $TEST_BUILD_DIR"
-    echo "Overall exit code: $TEST_RESULT"
-    echo
-    echo "To run tests manually:"
-    echo "  cd $TEST_BUILD_DIR"
-    echo "  ./bin/test_db_manager"
-    echo "  ./bin/test_analytics"
-    echo "  ./bin/test_application_logic"
-    echo
-    echo "To run all tests with CTest:"
-    echo "  cd $TEST_BUILD_DIR"
-    echo "  make run_all_tests"
+    echo "┌─────────────────────────────────────────────────────────────┐"
+    echo "│                    📋 What's Next?                          │"
+    echo "└─────────────────────────────────────────────────────────────┘"
+    
+    if [ $TEST_RESULT -eq 0 ]; then
+        echo "🎉 Great job! All tests are passing."
+        echo "   Your code is ready for the next step."
+    else
+        echo "🔧 Some tests need attention. Here's how to debug:"
+        echo ""
+        echo "   📍 Quick Fix Options:"
+        echo "   • Review the failure details above"
+        echo "   • Check the specific test files mentioned in the errors"
+        echo "   • Run individual test suites to isolate issues"
+    fi
+    
+    echo ""
+    echo "🚀 Available Commands:"
+    echo ""
+    echo "   Run Individual Test Suites:"
+    echo "   ├─ Database Tests:      cd $TEST_BUILD_DIR && ./bin/test_db_manager"
+    echo "   ├─ Analytics Tests:     cd $TEST_BUILD_DIR && ./bin/test_analytics"
+    echo "   └─ Application Tests:   cd $TEST_BUILD_DIR && ./bin/test_application_logic"
+    echo ""
+    echo "   Run All Tests (Alternative Methods):"
+    echo "   ├─ With CTest:          cd $TEST_BUILD_DIR && make run_all_tests"
+    echo "   └─ Re-run this script:  ./$(basename "$0")"
+    echo ""
+    echo "📁 Build Information:"
+    echo "   • Test executables: $TEST_BUILD_DIR/bin/"
+    echo "   • Log files: $TEST_BUILD_DIR/*_output.log"
+    echo "   • Exit code: $TEST_RESULT"
+    
+    if [ $TEST_RESULT -ne 0 ]; then
+        echo ""
+        echo "💡 Debugging Tips:"
+        echo "   • Check test log files for detailed error messages"
+        echo "   • Run tests with verbose output: ./bin/test_name -v2"
+        echo "   • Focus on one failing test at a time"
+    fi
+    
+    echo ""
+    echo "────────────────────────────────────────────────────────────────"
     
     exit $TEST_RESULT
 else
     echo "❌ Test executables not found!"
     echo "Build may have failed. Check the build output above."
+    echo ""
+    echo "💡 Troubleshooting:"
+    echo "   • Make sure you're in the correct directory"
+    echo "   • Check if CMake configuration succeeded"
+    echo "   • Verify all dependencies are installed"
+    echo "   • Try cleaning and rebuilding: rm -rf $TEST_BUILD_DIR"
     exit 1
 fi

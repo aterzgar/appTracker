@@ -2,6 +2,8 @@
 #include <iostream>
 #include <regex>
 #include <memory>
+#include <QDate>
+#include <QString>
 
 // Helper RAII for sqlite3_stmt
 struct SqliteStatementGuard {
@@ -19,24 +21,49 @@ DatabaseManager::~DatabaseManager() {
 
 bool DatabaseManager::openDatabase(const std::string& dbPath) {
     closeDatabase();
+    
     int rc = sqlite3_open(dbPath.c_str(), &db);
-    if (rc) {
+    if (rc != SQLITE_OK) {  // More explicit check
         std::cerr << "Can't open database: " << sqlite3_errmsg(db) << std::endl;
-        closeDatabase();
+        closeDatabase();  // This is good - cleans up even failed connection
         return false;
     }
+    
+    // Check if database is actually usable
+    if (!db) {
+        std::cerr << "Database handle is null after successful open" << std::endl;
+        return false;
+    }
+    
     return createTables();
 }
 
 void DatabaseManager::closeDatabase() {
     if (db) {
-        sqlite3_close(db);
+        int rc = sqlite3_close(db);
+        if (rc != SQLITE_OK) {
+            std::cerr << "Error closing database: " << sqlite3_errmsg(db) << std::endl;
+            // Force close if regular close fails
+            sqlite3_close_v2(db);
+        }
         db = nullptr;
     }
 }
 
 bool DatabaseManager::createTables() {
-    const char* sql =
+    // Use a transaction to ensure all tables and indexes are created atomically
+    char* errMsg = nullptr;
+    
+    // Begin transaction
+    int rc = sqlite3_exec(db, "BEGIN TRANSACTION", nullptr, nullptr, &errMsg);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to begin transaction: " << (errMsg ? errMsg : "Unknown error") << std::endl;
+        sqlite3_free(errMsg);
+        return false;
+    }
+    
+    // Create main table
+    const char* createTableSql =
         "CREATE TABLE IF NOT EXISTS APPLICATION_TRACKER("
         "ID INTEGER PRIMARY KEY AUTOINCREMENT,"
         "COMPANY_NAME TEXT NOT NULL,"
@@ -45,13 +72,41 @@ bool DatabaseManager::createTables() {
         "CONTACT_PERSON TEXT NOT NULL,"
         "STATUS TEXT,"
         "NOTES TEXT);";
-    char* errMsg = nullptr;
-    int rc = sqlite3_exec(db, sql, nullptr, nullptr, &errMsg);
+    
+    rc = sqlite3_exec(db, createTableSql, nullptr, nullptr, &errMsg);
     if (rc != SQLITE_OK) {
-        std::cerr << "SQL error: " << (errMsg ? errMsg : "") << std::endl;
+        std::cerr << "Failed to create table: " << (errMsg ? errMsg : "Unknown error") << std::endl;
+        sqlite3_free(errMsg);
+        sqlite3_exec(db, "ROLLBACK", nullptr, nullptr, nullptr);
+        return false;
+    }
+    
+    // Create indexes for better query performance
+    const char* createIndexesSql[] = {
+        "CREATE INDEX IF NOT EXISTS idx_company_name ON APPLICATION_TRACKER(COMPANY_NAME);",
+        "CREATE INDEX IF NOT EXISTS idx_status ON APPLICATION_TRACKER(STATUS);",
+        "CREATE INDEX IF NOT EXISTS idx_application_date ON APPLICATION_TRACKER(APPLICATION_DATE);",
+        "CREATE INDEX IF NOT EXISTS idx_position ON APPLICATION_TRACKER(POSITION);"
+    };
+    
+    for (const char* indexSql : createIndexesSql) {
+        rc = sqlite3_exec(db, indexSql, nullptr, nullptr, &errMsg);
+        if (rc != SQLITE_OK) {
+            std::cerr << "Failed to create index: " << (errMsg ? errMsg : "Unknown error") << std::endl;
+            sqlite3_free(errMsg);
+            sqlite3_exec(db, "ROLLBACK", nullptr, nullptr, nullptr);
+            return false;
+        }
+    }
+    
+    // Commit transaction
+    rc = sqlite3_exec(db, "COMMIT", nullptr, nullptr, &errMsg);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to commit transaction: " << (errMsg ? errMsg : "Unknown error") << std::endl;
         sqlite3_free(errMsg);
         return false;
     }
+    
     return true;
 }
 
@@ -146,9 +201,28 @@ bool DatabaseManager::updateApplication(const Application& app) {
 }
 
 bool DatabaseManager::isValidDateTime(const std::string& date) const {
-    // Year: 0000-9999, Month: 01-12, Day: 01-31 (basic check only)
+    // Year: 0000-9999, Month: 01-12, Day: 01-31 (basic format check)
     const std::regex pattern(R"(^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$)");
-    return std::regex_match(date, pattern);
+    
+    // First check if format is valid
+    if (!std::regex_match(date, pattern)) {
+        return false;
+    }
+    
+    // Check if date is not in the future
+    QDate applicationDate = QDate::fromString(QString::fromStdString(date), Qt::ISODate);
+    QDate currentDate = QDate::currentDate();
+    
+    if (applicationDate > currentDate) {
+        return false;  // Reject future dates
+    }
+    
+    // Optional: Check if it's a valid calendar date (e.g., not Feb 30th)
+    if (!applicationDate.isValid()) {
+        return false;
+    }
+    
+    return true;
 }
 
 bool DatabaseManager::isDuplicateEntry(const Application& app) const {
