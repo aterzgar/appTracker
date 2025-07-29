@@ -365,7 +365,7 @@ void TestDatabaseManager::testGetStatusCounts()
     QVERIFY(foundRejected);
 }
 
-#include "test_db_manager_standalone.moc"
+#include "test_db_manager.moc"
 
 // Main function for this test
 int main(int argc, char *argv[])

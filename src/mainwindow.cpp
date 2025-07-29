@@ -463,5 +463,3 @@ void MainWindow::onTableDoubleClick(int row, int)
     tableWidget->selectRow(row);
     editApplication();
 }
-
-#include "mainwindow.moc"

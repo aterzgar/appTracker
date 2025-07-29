@@ -4,6 +4,12 @@
 #include <QSignalSpy>
 #include <QTableWidget>
 #include <QPushButton>
+#include <QLineEdit>
+#include <QDateEdit>
+#include <QComboBox>
+#include <QTextEdit>
+#include <QGroupBox>
+#include <QLabel>
 #include "mainwindow.h"
 
 class TestApplicationLogic : public QObject
@@ -297,3 +303,11 @@ void TestApplicationLogic::testRefreshFunctionality()
 }
 
 #include "test_application_logic.moc"
+
+// Main function for this test
+int main(int argc, char *argv[])
+{
+    QApplication app(argc, argv);
+    TestApplicationLogic test;
+    return QTest::qExec(&test, argc, argv);
+}

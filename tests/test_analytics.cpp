@@ -337,3 +337,11 @@ void TestAnalytics::testAnalyticsAfterUpdate()
 }
 
 #include "test_analytics.moc"
+
+// Main function for this test
+int main(int argc, char *argv[])
+{
+    QCoreApplication app(argc, argv);
+    TestAnalytics test;
+    return QTest::qExec(&test, argc, argv);
+}
