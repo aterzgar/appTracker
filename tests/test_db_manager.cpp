@@ -29,6 +29,7 @@ private slots:
     // Validation tests
     void testDateValidation();
     void testDuplicateDetection();
+    void testAddFutureDatedApplication();
 
     // Analytics tests
     void testGetTotalApplications();
@@ -155,6 +156,22 @@ void TestDatabaseManager::testAddDuplicateApplication()
     // Verify only one application exists
     auto applications = dbManager->getAllApplications();
     QCOMPARE(applications.size(), 1);
+}
+
+void TestDatabaseManager::testAddFutureDatedApplication()
+{
+    QVERIFY(dbManager->openDatabase(testDbPath.toStdString()));
+    Application app = createTestApplication();
+    
+    // Use a date in the future
+    QDate futureDate = QDate::currentDate().addDays(1);
+    app.applicationDate = futureDate.toString("yyyy-MM-dd").toStdString();
+
+    QVERIFY(!dbManager->addApplication(app));
+    
+    // Ensure no application is added
+    auto applications = dbManager->getAllApplications();
+    QCOMPARE(applications.size(), 0);
 }
 
 void TestDatabaseManager::testGetAllApplications()
