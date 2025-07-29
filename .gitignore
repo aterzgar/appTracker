@@ -2,7 +2,6 @@
 /build
 build.sh
 /build_tests
-CMakeLists.txt
 TEST_RESULTS.md
 QUICK_REFERENCE.md
 DEVELOPMENT_PROCESS.md

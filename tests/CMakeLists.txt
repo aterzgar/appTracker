@@ -24,7 +24,7 @@ set(PROJECT_HEADERS
 )
 
 # Create the main test executable for database tests
-add_executable(cvTracker_tests test_db_manager_standalone.cpp ${PROJECT_SOURCES} ${PROJECT_HEADERS})
+add_executable(cvTracker_tests test_db_manager.cpp ${PROJECT_SOURCES} ${PROJECT_HEADERS})
 
 target_link_libraries(cvTracker_tests 
     Qt5::Widgets
