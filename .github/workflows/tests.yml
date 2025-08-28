@@ -1,4 +1,4 @@
-name: CV Tracker Tests
+name: APP Tracker Tests
 
 on:
   push:

@@ -176,7 +176,7 @@ void AnalyticsDialog::setupUI()
     auto summaryLayout = new QGridLayout(summaryGroup);
     
     totalLabel = new QLabel("Total Applications: 0", this);
-    totalLabel->setStyleSheet("font-weight: bold; font-size: 14px; color: #2c3e50;");
+    totalLabel->setStyleSheet("font-weight: bold; font-size: 14px; color: #6014bcff;");
     summaryLayout->addWidget(totalLabel, 0, 0, 1, 2);
     
     rejectedLabel = new QLabel("Rejections: 0", this);
@@ -264,8 +264,8 @@ void AnalyticsDialog::loadAnalytics()
 
 // ---------- MainWindow ----------
 
-MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent)
+MainWindow::MainWindow(const QString& dbFileName, QWidget *parent)
+    : QMainWindow(parent), m_dbFileName(dbFileName)
 {
     setupUI();
     initDatabase();
@@ -278,7 +278,7 @@ MainWindow::~MainWindow()
 
 void MainWindow::setupUI()
 {
-    setWindowTitle("CV Application Tracker");
+    setWindowTitle("Application Tracker");
     setMinimumSize(800, 600);
 
     centralWidget = new QWidget(this);
@@ -303,6 +303,8 @@ void MainWindow::setupButtons()
     deleteButton = new QPushButton("Delete Application", this);
     refreshButton = new QPushButton("Refresh", this);
     analyticsButton = new QPushButton("Analytics", this);
+    QLabel *searchLabel = new QLabel("Search:", this);
+    searchLineEdit = new QLineEdit(this);
 
     buttonLayout->addWidget(addButton);
     buttonLayout->addWidget(editButton);
@@ -310,6 +312,8 @@ void MainWindow::setupButtons()
     buttonLayout->addWidget(refreshButton);
     buttonLayout->addWidget(analyticsButton);
     buttonLayout->addStretch();
+    buttonLayout->addWidget(searchLabel);
+    buttonLayout->addWidget(searchLineEdit);
 }
 
 void MainWindow::connectButtons()
@@ -320,6 +324,7 @@ void MainWindow::connectButtons()
     connect(refreshButton, &QPushButton::clicked, this, &MainWindow::refreshTable);
     connect(analyticsButton, &QPushButton::clicked, this, &MainWindow::showAnalytics);
     connect(tableWidget, &QTableWidget::cellDoubleClicked, this, &MainWindow::onTableDoubleClick);
+    connect(searchLineEdit, &QLineEdit::textChanged, this, &MainWindow::onSearchTextChanged);
 }
 
 void MainWindow::setupTable()
@@ -330,7 +335,7 @@ void MainWindow::setupTable()
     const QStringList headers = {"ID", "Company", "Date", "Position", "Contact", "Status", "Notes"};
     tableWidget->setHorizontalHeaderLabels(headers);
 
-    tableWidget->setColumnWidth(0, 50);   // ID
+    tableWidget->setColumnWidth(0, 0);   // ID (hidden set it 50 if you wanna appear)
     tableWidget->setColumnWidth(1, 150);  // Company
     tableWidget->setColumnWidth(2, 100);  // Date
     tableWidget->setColumnWidth(3, 150);  // Position
@@ -350,14 +355,13 @@ void MainWindow::initDatabase()
 {
     QString dbPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
     QDir().mkpath(dbPath);
-    dbPath += "/applications.db";
+    dbPath += "/" + m_dbFileName;
 
     if (!dbManager.openDatabase(dbPath.toStdString())) {
         QMessageBox::critical(this, "Database Error", "Failed to open database!");
         QApplication::quit();
         return;
     }
-
     refreshTable();
 }
 
@@ -462,4 +466,18 @@ void MainWindow::onTableDoubleClick(int row, int)
 {
     tableWidget->selectRow(row);
     editApplication();
+}
+
+void MainWindow::onSearchTextChanged(const QString& text) {
+    for (int row = 0; row < tableWidget->rowCount(); ++row) {
+        bool match = false;
+        for (int col = 0; col < tableWidget->columnCount(); ++col) {
+            QTableWidgetItem* item = tableWidget->item(row, col);
+            if (item && item->text().contains(text, Qt::CaseInsensitive)) {
+                match = true;
+                break;
+            }
+        }
+        tableWidget->setRowHidden(row, !match);
+    }
 }

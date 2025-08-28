@@ -88,7 +88,7 @@ class MainWindow : public QMainWindow
     Q_OBJECT
 
 public:
-    MainWindow(QWidget *parent = nullptr);
+    explicit MainWindow(const QString& dbFileName, QWidget *parent = nullptr);
     ~MainWindow();
 
 private slots:
@@ -98,6 +98,7 @@ private slots:
     void refreshTable();
     void showAnalytics();
     void onTableDoubleClick(int row, int column);
+    void onSearchTextChanged(const QString& text);
 
 private:
     void setupUI();
@@ -118,6 +119,8 @@ private:
     QPushButton *refreshButton;
     QPushButton *analyticsButton;
     QTableWidget *tableWidget;
+    QLineEdit *searchLineEdit;
+    QString m_dbFileName;
     
     DatabaseManager dbManager;
 };

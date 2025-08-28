@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(cvTracker)
+project(appTracker)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -30,22 +30,22 @@ set(HEADERS
 )
 
 # Create executable
-add_executable(cvTracker ${SOURCES} ${HEADERS})
+add_executable(appTracker ${SOURCES} ${HEADERS})
 
 # Link libraries
-target_link_libraries(cvTracker 
+target_link_libraries(appTracker 
     Qt5::Widgets
     ${SQLITE3_LIBRARIES}
 )
 
 # Include directories for SQLite
-target_include_directories(cvTracker PRIVATE ${SQLITE3_INCLUDE_DIRS})
+target_include_directories(appTracker PRIVATE ${SQLITE3_INCLUDE_DIRS})
 
 # Compiler flags for SQLite
-target_compile_options(cvTracker PRIVATE ${SQLITE3_CFLAGS_OTHER})
+target_compile_options(appTracker PRIVATE ${SQLITE3_CFLAGS_OTHER})
 
 # Set output directory
-set_target_properties(cvTracker PROPERTIES
+set_target_properties(appTracker PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
 

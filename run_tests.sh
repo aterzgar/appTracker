@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# CV Tracker Test Runner Script
+# APP Tracker Test Runner Script
 
 # Don't exit on error so we can properly collect all test results
 set +e
 
-echo "=== CV Tracker Test Suite ==="
+echo "=== APP Tracker Test Suite ==="
 echo "Building and running automated tests..."
 echo
 

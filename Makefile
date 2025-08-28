@@ -7,10 +7,10 @@ all: build
 
 # Build the main application
 build:
-	@echo "Building CV Tracker..."
+	@echo "Building APP Tracker..."
 	@mkdir -p build
 	@cd build && cmake .. && make -j$$(nproc)
-	@echo "✅ Build complete! Executable: build/bin/cvTracker"
+	@echo "✅ Build complete! Executable: build/bin/appTracker"
 
 # Clean build artifacts
 clean:
@@ -33,20 +33,20 @@ test-clean:
 
 # Build with tests enabled
 build-with-tests:
-	@echo "Building CV Tracker with tests..."
+	@echo "Building APP Tracker with tests..."
 	@mkdir -p build
 	@cd build && cmake -DBUILD_TESTS=ON .. && make -j$$(nproc)
 	@echo "✅ Build with tests complete!"
 
 # Install (placeholder for future package installation)
 install: build
-	@echo "Installing CV Tracker..."
+	@echo "Installing APP Tracker..."
 	@echo "⚠️  Installation not yet implemented"
 
 # Run application
 run: build
-	@echo "Running CV Tracker..."
-	@./build/bin/cvTracker
+	@echo "Running APP Tracker..."
+	@./build/bin/appTracker
 
 # Development setup
 dev-setup:
@@ -64,7 +64,7 @@ dev-setup:
 
 # Help target
 help:
-	@echo "CV Tracker Build System"
+	@echo "APP Tracker Build System"
 	@echo ""
 	@echo "Available targets:"
 	@echo "  build           - Build the main application"

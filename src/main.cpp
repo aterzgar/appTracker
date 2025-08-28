@@ -2,15 +2,22 @@
 #include <QStyleFactory>
 #include <QDir>
 #include "mainwindow.h"
+#include <fstream>
+#include <json.hpp>
 
 int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
+
+    std::ifstream configFile("../../src/config.json");
+    nlohmann::json config;
+    configFile >> config;
+    std::string dbFileName = config["database_file"];
     
     // Set application properties
-    app.setApplicationName("CV Application Tracker");
+    app.setApplicationName("APP Application Tracker");
     app.setApplicationVersion("2.0");
-    app.setOrganizationName("CV Tracker");
+    app.setOrganizationName("APP Tracker");
     
     // Set a modern style
     app.setStyle(QStyleFactory::create("Fusion"));
@@ -32,7 +39,7 @@ int main(int argc, char *argv[])
     darkPalette.setColor(QPalette::HighlightedText, Qt::black);
     app.setPalette(darkPalette);
     
-    MainWindow window;
+    MainWindow window(QString::fromStdString(dbFileName));
     window.show();
     
     return app.exec();
