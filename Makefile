@@ -1,84 +1,38 @@
-# CV Tracker Makefile
+# Simple wrapper around CMake for convenient development.
+#
+# Usage:
+#   make          – configure + build
+#   make run      – build + run the app
+#   make test     – build + run tests
+#   make clean    – remove build directory
+#   make rebuild  – clean + full rebuild
+#
 
-.PHONY: all build clean test test-clean install help
+BUILD_DIR = build
 
-# Default target
-all: build
+.PHONY: all run test clean rebuild
 
-# Build the main application
+all: configure build
+
+configure:
+	@mkdir -p $(BUILD_DIR)
+	@cd $(BUILD_DIR) && cmake ..
+
 build:
-	@echo "Building APP Tracker..."
-	@mkdir -p build
-	@cd build && cmake .. && make -j$$(nproc)
-	@echo "✅ Build complete! Executable: build/bin/appTracker"
+	@$(MAKE) -C $(BUILD_DIR)
 
-# Clean build artifacts
-clean:
-	@echo "Cleaning build artifacts..."
-	@rm -rf build
-	@rm -rf build_tests
-	@echo "✅ Clean complete!"
+run: all
+	@echo ""
+	@echo "▶ Running appTracker..."
+	@$(BUILD_DIR)/bin/appTracker
 
-# Run tests
 test:
-	@echo "Running test suite..."
-	@chmod +x ./run_tests.sh
-	@./run_tests.sh
+	@mkdir -p build_tests
+	@cd build_tests && cmake -DBUILD_TESTS=ON ..
+	@$(MAKE) -C build_tests
+	@cd build_tests && ctest --output-on-failure
 
-# Clean only test artifacts
-test-clean:
-	@echo "Cleaning test artifacts..."
-	@rm -rf build_tests
-	@echo "✅ Test clean complete!"
+clean:
+	@rm -rf $(BUILD_DIR) build_tests
 
-# Build with tests enabled
-build-with-tests:
-	@echo "Building APP Tracker with tests..."
-	@mkdir -p build
-	@cd build && cmake -DBUILD_TESTS=ON .. && make -j$$(nproc)
-	@echo "✅ Build with tests complete!"
-
-# Install (placeholder for future package installation)
-install: build
-	@echo "Installing APP Tracker..."
-	@echo "⚠️  Installation not yet implemented"
-
-# Run application
-run: build
-	@echo "Running APP Tracker..."
-	@./build/bin/appTracker
-
-# Development setup
-dev-setup:
-	@echo "Setting up development environment..."
-	@sudo apt-get update
-	@sudo apt-get install -y \
-		build-essential \
-		cmake \
-		qt5-default \
-		qtbase5-dev \
-		qtbase5-dev-tools \
-		libsqlite3-dev \
-		pkg-config
-	@echo "✅ Development environment ready!"
-
-# Help target
-help:
-	@echo "APP Tracker Build System"
-	@echo ""
-	@echo "Available targets:"
-	@echo "  build           - Build the main application"
-	@echo "  clean           - Clean all build artifacts"
-	@echo "  test            - Run the test suite"
-	@echo "  test-clean      - Clean only test artifacts"
-	@echo "  build-with-tests- Build with tests enabled"
-	@echo "  run             - Build and run the application"
-	@echo "  dev-setup       - Install development dependencies"
-	@echo "  install         - Install the application (not implemented)"
-	@echo "  help            - Show this help message"
-	@echo ""
-	@echo "Examples:"
-	@echo "  make build      # Build the application"
-	@echo "  make test       # Run all tests"
-	@echo "  make clean      # Clean everything"
-	@echo "  make run        # Build and run"
+rebuild: clean all

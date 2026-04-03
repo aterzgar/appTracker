@@ -24,6 +24,21 @@ A modern Qt-based desktop application to track job applications, visualise analy
 
 ## Quick Start
 
+### Build & Run
+
+```bash
+git clone https://github.com/aterzgar/appTracker.git
+cd appTracker
+./setup.sh
+make run
+```
+
+For AI insights, add `--ollama` to auto-install Ollama and pull a model:
+
+```bash
+./setup.sh --ollama
+```
+
 ### Prerequisites
 
 | Component | Required | Why |
@@ -49,21 +64,13 @@ sudo dnf install cmake qt5-qtbase-devel qt5-qtbase sqlite-devel gcc-c++
 sudo pacman -S cmake qt5-base sqlite gcc
 ```
 
-### Build & Run
-
-```bash
-mkdir build && cd build
-cmake ..
-make -j$(nproc)
-./bin/appTracker
-```
+Or simply run `./setup.sh` — it detects your distro and installs everything automatically.
 
 ### AI Insights (Optional)
 
-1. Install Ollama: `curl -fsSL https://ollama.com/install.sh | sh`
-2. Pull a model: `ollama pull llama3.2`
-3. Run Ollama: `ollama serve`
-4. Open **Analytics → Generate AI Insights** in the app
+1. Install Ollama: `./setup.sh --ollama`
+2. Run Ollama: `ollama serve`
+3. Open **Analytics → Generate AI Insights** in the app
 
 ## Usage
 
