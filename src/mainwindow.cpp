@@ -757,7 +757,7 @@ void MainWindow::initDatabase() {
     const QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
     QDir().mkpath(dir);
     const QString path = dir + "/" + m_dbFileName;
-    qDebug() << "Database path:" << path;
+    //qDebug() << "Database path:" << path;
 
     if (!m_db.openDatabase(path.toStdString())) {
         QMessageBox::critical(this, "Database Error",
