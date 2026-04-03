@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Find required packages
-find_package(Qt5 COMPONENTS Widgets REQUIRED)
+find_package(Qt5 COMPONENTS Widgets Network REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(SQLITE3 REQUIRED sqlite3)
 
@@ -24,6 +24,7 @@ set(SOURCES
     src/db_manager.cpp
     src/application_service.cpp
     src/analytics_visualizer.cpp
+    src/llm_client.cpp
 )
 
 set(HEADERS
@@ -31,14 +32,16 @@ set(HEADERS
     src/db_manager.h
     src/application_service.h
     src/analytics_visualizer.h
+    src/llm_client.h
 )
 
 # Create executable
 add_executable(appTracker ${SOURCES} ${HEADERS})
 
 # Link libraries
-target_link_libraries(appTracker 
+target_link_libraries(appTracker
     Qt5::Widgets
+    Qt5::Network
     ${SQLITE3_LIBRARIES}
 )
 

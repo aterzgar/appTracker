@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include <utility>
+#include <map>
 #include "db_manager.h"
 
 // ---------------------------------------------------------------------------
@@ -37,6 +38,11 @@ public:
     std::vector<Application> listApplications()                        const;
     std::vector<Application> searchApplications(const QString& query) const;
     ApplicationAnalytics     getAnalytics()                            const;
+
+    // --- LLM prompt builder ---
+    // Converts analytics + raw data into a structured text prompt for the LLM.
+    std::string buildInsightsPrompt(const ApplicationAnalytics& analytics,
+                                     const std::vector<Application>& apps) const;
 
 private:
     // Returns true when app data is acceptable; fills `error` on failure.

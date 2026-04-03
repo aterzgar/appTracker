@@ -2,6 +2,7 @@
 #include <QApplication>
 #include <QTemporaryDir>
 #include <QSignalSpy>
+#include <QTest>
 #include <QTableWidget>
 #include <QPushButton>
 #include <QLineEdit>
@@ -104,9 +105,9 @@ void TestApplicationLogic::testButtonsExist()
         buttonTexts << button->text();
     }
     
-    QVERIFY(buttonTexts.contains("Add Application"));
-    QVERIFY(buttonTexts.contains("Edit Application"));
-    QVERIFY(buttonTexts.contains("Delete Application"));
+    QVERIFY(buttonTexts.contains("+ New Application"));
+    QVERIFY(buttonTexts.contains("Edit"));
+    QVERIFY(buttonTexts.contains("Delete"));
     QVERIFY(buttonTexts.contains("Refresh"));
     QVERIFY(buttonTexts.contains("Analytics"));
 }
@@ -232,7 +233,7 @@ void TestApplicationLogic::testAddApplicationWorkflow()
     
     auto buttons = mainWindow->findChildren<QPushButton*>();
     for (auto button : buttons) {
-        if (button->text() == "Add Application") {
+        if (button->text() == "+ New Application") {
             foundAddButton = true;
             
             // Test that clicking the button doesn't crash
@@ -250,61 +251,62 @@ void TestApplicationLogic::testAddApplicationWorkflow()
 void TestApplicationLogic::testEditApplicationWorkflow()
 {
     auto buttons = mainWindow->findChildren<QPushButton*>();
-    bool foundEditButton = false;
-    
+    QPushButton* editBtn = nullptr;
+
     for (auto button : buttons) {
-        if (button->text() == "Edit Application") {
-            foundEditButton = true;
-            
-            // Test button click signal
-            QSignalSpy spy(button, &QPushButton::clicked);
-            button->click();
-            QCOMPARE(spy.count(), 1);
+        if (button->text() == "Edit") {
+            editBtn = button;
             break;
         }
     }
-    
-    QVERIFY(foundEditButton);
+    QVERIFY(editBtn != nullptr);
+
+    editBtn->setEnabled(true);
+
+    QSignalSpy spy(editBtn, &QPushButton::clicked);
+    editBtn->animateClick();
+    QTest::qWait(150);
+    QCOMPARE(spy.count(), 1);
 }
 
 void TestApplicationLogic::testDeleteApplicationWorkflow()
 {
     auto buttons = mainWindow->findChildren<QPushButton*>();
-    bool foundDeleteButton = false;
-    
+    QPushButton* deleteBtn = nullptr;
+
     for (auto button : buttons) {
-        if (button->text() == "Delete Application") {
-            foundDeleteButton = true;
-            
-            // Test button click signal
-            QSignalSpy spy(button, &QPushButton::clicked);
-            button->click();
-            QCOMPARE(spy.count(), 1);
+        if (button->text() == "Delete") {
+            deleteBtn = button;
             break;
         }
     }
-    
-    QVERIFY(foundDeleteButton);
+    QVERIFY(deleteBtn != nullptr);
+
+    deleteBtn->setEnabled(true);
+
+    QSignalSpy spy(deleteBtn, &QPushButton::clicked);
+    deleteBtn->animateClick();
+    QTest::qWait(150);
+    QCOMPARE(spy.count(), 1);
 }
 
 void TestApplicationLogic::testRefreshFunctionality()
 {
     auto buttons = mainWindow->findChildren<QPushButton*>();
-    bool foundRefreshButton = false;
-    
+    QPushButton* refreshBtn = nullptr;
+
     for (auto button : buttons) {
         if (button->text() == "Refresh") {
-            foundRefreshButton = true;
-            
-            // Test button click signal
-            QSignalSpy spy(button, &QPushButton::clicked);
-            button->click();
-            QCOMPARE(spy.count(), 1);
+            refreshBtn = button;
             break;
         }
     }
-    
-    QVERIFY(foundRefreshButton);
+    QVERIFY(refreshBtn != nullptr);
+
+    QSignalSpy spy(refreshBtn, &QPushButton::clicked);
+    refreshBtn->animateClick();
+    QTest::qWait(150);
+    QCOMPARE(spy.count(), 1);
 }
 
 #include "test_application_logic.moc"

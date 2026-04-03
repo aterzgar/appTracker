@@ -3,8 +3,6 @@
 /build_tests/
 /tests
 /doc
-/src/json.hpp
-
 # CMake output
 CMakeFiles/
 CMakeCache.txt

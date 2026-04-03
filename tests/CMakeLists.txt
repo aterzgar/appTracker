@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 project(cvTracker_tests)
 
 # Find required packages for testing
-find_package(Qt5 COMPONENTS Widgets Test REQUIRED)
+find_package(Qt5 COMPONENTS Widgets Network Test REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(SQLITE3 REQUIRED sqlite3)
 
@@ -19,12 +19,14 @@ set(PROJECT_SOURCES
     ../src/mainwindow.cpp
     ../src/application_service.cpp
     ../src/analytics_visualizer.cpp
+    ../src/llm_client.cpp
 )
 
 # 1. Database Manager Tests
 add_executable(test_db_manager test_db_manager.cpp ${PROJECT_SOURCES})
 target_link_libraries(test_db_manager
     Qt5::Widgets
+    Qt5::Network
     Qt5::Test
     ${SQLITE3_LIBRARIES}
 )
@@ -38,6 +40,7 @@ set_target_properties(test_db_manager PROPERTIES
 add_executable(test_analytics test_analytics.cpp ${PROJECT_SOURCES})
 target_link_libraries(test_analytics
     Qt5::Widgets
+    Qt5::Network
     Qt5::Test
     ${SQLITE3_LIBRARIES}
 )
@@ -51,6 +54,7 @@ set_target_properties(test_analytics PROPERTIES
 add_executable(test_application_logic test_application_logic.cpp ${PROJECT_SOURCES})
 target_link_libraries(test_application_logic
     Qt5::Widgets
+    Qt5::Network
     Qt5::Test
     ${SQLITE3_LIBRARIES}
 )
@@ -64,6 +68,7 @@ set_target_properties(test_application_logic PROPERTIES
 add_executable(test_application_service test_application_service.cpp ${PROJECT_SOURCES})
 target_link_libraries(test_application_service
     Qt5::Widgets
+    Qt5::Network
     Qt5::Test
     ${SQLITE3_LIBRARIES}
 )

@@ -1,27 +1,19 @@
 #include <QApplication>
 #include <QStyleFactory>
-#include <QDir>
 #include "mainwindow.h"
-#include <fstream>
-#include <json.hpp>
 
 int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
 
-    std::ifstream configFile("../../src/config.json");
-    nlohmann::json config;
-    configFile >> config;
-    std::string dbFileName = config["database_file"];
-    
-    // Set application properties
-    app.setApplicationName("ApplicationTracker");
+    // --- Application metadata (used by QSettings for config paths) ---
+    app.setApplicationName("AppTracker");
     app.setApplicationVersion("2.0");
-    app.setOrganizationName("APP-Tracker");
-    
+    app.setOrganizationName("AppTracker");
+
     // Set a modern style
     app.setStyle(QStyleFactory::create("Fusion"));
-    
+
     // Apply dark theme
     QPalette darkPalette;
     darkPalette.setColor(QPalette::Window, QColor(53, 53, 53));
@@ -38,9 +30,10 @@ int main(int argc, char *argv[])
     darkPalette.setColor(QPalette::Highlight, QColor(42, 130, 218));
     darkPalette.setColor(QPalette::HighlightedText, Qt::black);
     app.setPalette(darkPalette);
-    
-    MainWindow window(QString::fromStdString(dbFileName));
+
+    // MainWindow handles the database path via QStandardPaths internally.
+    MainWindow window("applications.db");
     window.show();
-    
+
     return app.exec();
 }

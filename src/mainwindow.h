@@ -35,6 +35,7 @@
 #include "db_manager.h"
 #include "application_service.h"
 #include "analytics_visualizer.h"
+#include "llm_client.h"
 
 // ---------------------------------------------------------------------------
 // Column indices — single source of truth; never use magic numbers elsewhere
@@ -136,6 +137,9 @@ class AnalyticsDialog : public QDialog {
 public:
     explicit AnalyticsDialog(ApplicationService* service, QWidget* parent = nullptr);
 
+    // Pass LLM model from MainWindow's QSettings storage.
+    void configureLLM(const QString& model = {});
+
 protected:
     void showEvent(QShowEvent* event) override;
 
@@ -148,10 +152,17 @@ private:
     void populateProgressBars(const ApplicationAnalytics& a);
     void populateStatusGrid  (const std::map<std::string, int>& counts);
 
+    void generateInsights();
+    void onInsightsReady(const QString& insights);
+    void onInsightsError(const QString& error);
+
     static std::map<std::string, int> aggregateInterviews(
         const std::vector<std::pair<std::string, int>>& raw);
 
     ApplicationService* m_service = nullptr;
+
+    // LLM
+    LLMClient* m_llmClient = nullptr;
 
     QLabel* m_totalLabel      = nullptr;
     QLabel* m_rejectedLabel   = nullptr;
@@ -168,6 +179,11 @@ private:
     QGroupBox*   m_statusGroup  = nullptr;
     QGridLayout* m_statusLayout = nullptr;
     QVBoxLayout* m_scrollLayout = nullptr;
+
+    // LLM UI
+    QPushButton* m_generateInsightsBtn = nullptr;
+    QTextEdit*   m_insightsOutput      = nullptr;
+    QGroupBox*   m_insightsGroup       = nullptr;
 };
 
 // ---------------------------------------------------------------------------

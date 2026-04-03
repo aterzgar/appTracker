@@ -302,11 +302,15 @@ Application EditApplicationDialog::getApplication() const {
 // ===========================================================================
 
 AnalyticsDialog::AnalyticsDialog(ApplicationService* service, QWidget* parent)
-    : QDialog(parent), m_service(service)
+    : QDialog(parent), m_service(service), m_llmClient(new LLMClient(this))
 {
     setWindowTitle("Application Analytics");
     resize(1000, 900);
     setupUI();
+
+    // Wire LLM signals
+    connect(m_llmClient,  &LLMClient::insightsReady, this, &AnalyticsDialog::onInsightsReady);
+    connect(m_llmClient,  &LLMClient::errorOccurred, this, &AnalyticsDialog::onInsightsError);
 }
 
 void AnalyticsDialog::setupUI() {
@@ -357,6 +361,26 @@ void AnalyticsDialog::setupUI() {
     m_statusLayout = new QGridLayout(m_statusGroup);
     m_scrollLayout->addWidget(m_statusGroup);
     m_scrollLayout->addStretch();
+
+    // --- AI Insights section ---
+    m_insightsGroup = new QGroupBox("✨ AI Insights", this);
+    auto* insightsLayout = new QVBoxLayout(m_insightsGroup);
+
+    m_generateInsightsBtn = new QPushButton("Generate AI Insights", this);
+    m_generateInsightsBtn->setToolTip("Analyze your application data and get AI-powered recommendations");
+    m_generateInsightsBtn->setEnabled(false); // enabled only when LLM is configured
+    insightsLayout->addWidget(m_generateInsightsBtn);
+
+    m_insightsOutput = new QTextEdit(this);
+    m_insightsOutput->setReadOnly(true);
+    m_insightsOutput->setPlaceholderText("Click 'Generate AI Insights' to get AI-powered analysis of your job application data...");
+    m_insightsOutput->setMinimumHeight(150);
+    m_insightsOutput->setStyleSheet("QTextEdit { background-color: #1e1e2e; color: #cdd6f4; font-family: monospace; font-size: 12px; border: 1px solid #45475a; border-radius: 4px; padding: 8px; }");
+    insightsLayout->addWidget(m_insightsOutput);
+
+    connect(m_generateInsightsBtn, &QPushButton::clicked, this, &AnalyticsDialog::generateInsights);
+
+    mainLayout->addWidget(m_insightsGroup);
 
     auto* closeBtn = new QPushButton("Close", this);
     connect(closeBtn, &QPushButton::clicked, this, &QDialog::close);
@@ -479,6 +503,51 @@ void AnalyticsDialog::populateStatusGrid(const std::map<std::string, int>& count
     }
 }
 
+// ---------------------------------------------------------------------------
+// AnalyticsDialog — LLM integration
+// ---------------------------------------------------------------------------
+
+void AnalyticsDialog::configureLLM(const QString& model) {
+    if (m_llmClient) {
+        if (!model.isEmpty()) m_llmClient->setModel(model);
+        m_generateInsightsBtn->setEnabled(m_llmClient->isConfigured());
+    }
+}
+
+void AnalyticsDialog::generateInsights() {
+    if (!m_service || !m_llmClient || !m_llmClient->isConfigured()) return;
+
+    const auto analytics = m_service->getAnalytics();
+    const auto apps      = m_service->listApplications();
+    const QString prompt = QString::fromStdString(
+        m_service->buildInsightsPrompt(analytics, apps));
+
+    m_generateInsightsBtn->setEnabled(false);
+    m_generateInsightsBtn->setText("⏳ Generating...");
+    m_insightsOutput->setText("Analyzing your application data...");
+
+    m_llmClient->generateInsights(prompt);
+}
+
+void AnalyticsDialog::onInsightsReady(const QString& insights) {
+    m_insightsOutput->setText(insights);
+    m_generateInsightsBtn->setEnabled(m_llmClient->isConfigured());
+    m_generateInsightsBtn->setText("Generate AI Insights");
+}
+
+void AnalyticsDialog::onInsightsError(const QString& error) {
+    QString msg = error;
+    if (msg.contains("connection", Qt::CaseInsensitive) || msg.contains("refused", Qt::CaseInsensitive)) {
+        msg = "Cannot connect to Ollama.\n\n"
+              "Make sure Ollama is running locally:\n"
+              "  Install: curl -fsSL https://ollama.com/install.sh | sh\n"
+              "  Run:     ollama run llama3.2";
+    }
+    m_insightsOutput->setText(QString("⚠️ Error: %1").arg(msg));
+    m_generateInsightsBtn->setEnabled(true);
+    m_generateInsightsBtn->setText("Generate AI Insights");
+}
+
 // ===========================================================================
 // MainWindow — construction
 // ===========================================================================
@@ -488,6 +557,11 @@ MainWindow::MainWindow(const QString& dbFileName, QWidget* parent)
     , m_dbFileName(dbFileName)
     , m_settings("AppTracker", "AppTracker")
 {
+    // --- LLM configuration (Ollama local) ---
+    // Install: curl -fsSL https://ollama.com/install.sh | sh
+    // Run:     ollama run llama3.2
+    m_settings.setValue("llm/model", "llama3.2");
+
     setupUI();
     // initDatabase() is deferred so the window is fully constructed first.
     // Use a zero-delay timer so it runs on the next event-loop iteration.
@@ -873,6 +947,12 @@ void MainWindow::onShowAnalytics() {
     }
     m_analyticsDialog = new AnalyticsDialog(m_service.get(), this);
     m_analyticsDialog->setAttribute(Qt::WA_DeleteOnClose);
+
+    // Pass LLM model from settings
+    m_analyticsDialog->configureLLM(
+        m_settings.value("llm/model").toString()
+    );
+
     m_analyticsDialog->show();
 }
 
