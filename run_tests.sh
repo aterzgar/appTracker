@@ -35,6 +35,7 @@ echo
 # Set initial test status
 DB_TEST_RESULT=0
 ANALYTICS_TEST_RESULT=0
+SERVICE_TEST_RESULT=0
 LOGIC_TEST_RESULT=0
 
 # Function to run tests and extract detailed information
@@ -79,21 +80,25 @@ run_test() {
 }
 
 # Check if test executables exist
-if [ -d "./bin" ] && [ -f "./bin/test_db_manager" ] && [ -f "./bin/test_analytics" ] && [ -f "./bin/test_application_logic" ]; then
+if [ -d "./bin" ] && [ -f "./bin/test_db_manager" ] && [ -f "./bin/test_analytics" ] \
+    && [ -f "./bin/test_application_service" ] && [ -f "./bin/test_application_logic" ]; then
     # Run each test suite individually
     rm -f test_summary.txt failed_tests.txt
     
     run_test "./bin/test_db_manager" "Database manager tests"
     DB_TEST_RESULT=$?
-    
+
     run_test "./bin/test_analytics" "Analytics tests"
     ANALYTICS_TEST_RESULT=$?
-    
+
+    run_test "./bin/test_application_service" "Application service tests"
+    SERVICE_TEST_RESULT=$?
+
     run_test "./bin/test_application_logic" "Application logic tests"
     LOGIC_TEST_RESULT=$?
     
     # Check overall test results
-    TEST_RESULT=$(( $DB_TEST_RESULT + $ANALYTICS_TEST_RESULT + $LOGIC_TEST_RESULT ))
+    TEST_RESULT=$(( $DB_TEST_RESULT + $ANALYTICS_TEST_RESULT + $SERVICE_TEST_RESULT + $LOGIC_TEST_RESULT ))
     
     echo
     echo "=== Test Summary ==="
@@ -133,6 +138,7 @@ if [ -d "./bin" ] && [ -f "./bin/test_db_manager" ] && [ -f "./bin/test_analytic
     echo "   Run Individual Test Suites:"
     echo "   ├─ Database Tests:      cd $TEST_BUILD_DIR && ./bin/test_db_manager"
     echo "   ├─ Analytics Tests:     cd $TEST_BUILD_DIR && ./bin/test_analytics"
+    echo "   ├─ Service Tests:       cd $TEST_BUILD_DIR && ./bin/test_application_service"
     echo "   └─ Application Tests:   cd $TEST_BUILD_DIR && ./bin/test_application_logic"
     echo ""
     echo "   Run All Tests (Alternative Methods):"

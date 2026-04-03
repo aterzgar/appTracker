@@ -164,7 +164,7 @@ void TestDatabaseManager::testGetAllApplications()
     
     // Add multiple applications
     Application app1 = createTestApplication("Company A", "Developer", "Applied");
-    Application app2 = createTestApplication("Company B", "Engineer", "Interview Scheduled");
+    Application app2 = createTestApplication("Company B", "Engineer", "Interviews");
     Application app3 = createTestApplication("Company C", "Analyst", "Rejected");
     
     QVERIFY(dbManager->addApplication(app1));
@@ -189,7 +189,7 @@ void TestDatabaseManager::testUpdateApplication()
     QCOMPARE(applications.size(), 1);
     
     Application updatedApp = applications[0];
-    updatedApp.status = "Interview Scheduled";
+    updatedApp.status = "Interviews";
     updatedApp.notes = "Updated notes";
     
     // Update the application
@@ -198,7 +198,7 @@ void TestDatabaseManager::testUpdateApplication()
     // Verify the update
     applications = dbManager->getAllApplications();
     QCOMPARE(applications.size(), 1);
-    QCOMPARE(applications[0].status, std::string("Interview Scheduled"));
+    QCOMPARE(applications[0].status, std::string("Interviews"));
     QCOMPARE(applications[0].notes, std::string("Updated notes"));
 }
 
@@ -307,7 +307,7 @@ void TestDatabaseManager::testGetApplicationsByStatus()
     // Add applications with different statuses
     Application app1 = createTestApplication("Company A", "Developer", "Applied");
     Application app2 = createTestApplication("Company B", "Engineer", "Applied");
-    Application app3 = createTestApplication("Company C", "Analyst", "Interview Scheduled");
+    Application app3 = createTestApplication("Company C", "Analyst", "Interviews");
     Application app4 = createTestApplication("Company D", "Manager", "Rejected");
     
     QVERIFY(dbManager->addApplication(app1));
@@ -317,7 +317,7 @@ void TestDatabaseManager::testGetApplicationsByStatus()
     
     // Test status counts
     QCOMPARE(dbManager->getApplicationsByStatus("Applied"), 2);
-    QCOMPARE(dbManager->getApplicationsByStatus("Interview Scheduled"), 1);
+    QCOMPARE(dbManager->getApplicationsByStatus("Interviews"), 1);
     QCOMPARE(dbManager->getApplicationsByStatus("Rejected"), 1);
     QCOMPARE(dbManager->getApplicationsByStatus("Offer Received"), 0);
 }
@@ -329,7 +329,7 @@ void TestDatabaseManager::testGetStatusCounts()
     // Add applications with different statuses
     Application app1 = createTestApplication("Company A", "Developer", "Applied");
     Application app2 = createTestApplication("Company B", "Engineer", "Applied");
-    Application app3 = createTestApplication("Company C", "Analyst", "Interview Scheduled");
+    Application app3 = createTestApplication("Company C", "Analyst", "Interviews");
     Application app4 = createTestApplication("Company D", "Manager", "Rejected");
     Application app5 = createTestApplication("Company E", "Lead", "Applied");
     
@@ -351,7 +351,7 @@ void TestDatabaseManager::testGetStatusCounts()
         if (pair.first == "Applied") {
             QCOMPARE(pair.second, 3);
             foundApplied = true;
-        } else if (pair.first == "Interview Scheduled") {
+        } else if (pair.first == "Interviews") {
             QCOMPARE(pair.second, 1);
             foundInterview = true;
         } else if (pair.first == "Rejected") {

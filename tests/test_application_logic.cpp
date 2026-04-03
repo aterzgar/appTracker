@@ -69,7 +69,8 @@ void TestApplicationLogic::cleanupTestCase()
 
 void TestApplicationLogic::init()
 {
-    mainWindow = new MainWindow();
+    QString dbFile = tempDir->path() + "/test.db";
+    mainWindow = new MainWindow(dbFile);
     // Don't show the window during tests to avoid GUI interference
 }
 
@@ -84,7 +85,7 @@ void TestApplicationLogic::cleanup()
 void TestApplicationLogic::testMainWindowInitialization()
 {
     QVERIFY(mainWindow != nullptr);
-    QCOMPARE(mainWindow->windowTitle(), QString("CV Application Tracker"));
+    QCOMPARE(mainWindow->windowTitle(), QString("Application Tracker"));
     QVERIFY(mainWindow->minimumSize().width() >= 800);
     QVERIFY(mainWindow->minimumSize().height() >= 600);
 }
@@ -155,7 +156,7 @@ void TestApplicationLogic::testAddApplicationDialog()
     QVERIFY(notesEdit != nullptr);
     
     // Check status combo items
-    QStringList expectedStatuses = {"Applied", "Interview Scheduled", "Interview Completed", 
+    QStringList expectedStatuses = {"Applied", "Interviews", 
                                    "Offer Received", "Rejected", "Withdrawn"};
     QCOMPARE(statusCombo->count(), expectedStatuses.size());
     for (int i = 0; i < expectedStatuses.size(); ++i) {
@@ -206,11 +207,12 @@ void TestApplicationLogic::testAnalyticsDialog()
     // IMPORTANT: Open the database before using it!
     QVERIFY(dbManager.openDatabase(":memory:")); // Use in-memory database for tests
     
-    AnalyticsDialog dialog(&dbManager);
+    ApplicationService appService(&dbManager);
+    AnalyticsDialog dialog(&appService);
     
     // Check dialog properties
     QCOMPARE(dialog.windowTitle(), QString("Application Analytics"));
-    QVERIFY(dialog.isModal());
+    QVERIFY(!dialog.isModal()); // Now modeless
     
     // Check that UI elements exist
     auto summaryGroup = dialog.findChild<QGroupBox*>();

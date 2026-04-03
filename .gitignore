@@ -1,7 +1,50 @@
-.qodo
-/build
-build.sh
-/build_tests
+# === Local build artifacts ===
+/build/
+/build_tests/
+/tests
+/doc
+/src/json.hpp
+
+# CMake output
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+*.cmake
+
+# Binary/executables
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Qt auto-generated files
+*/appTracker_autogen/
+*/test_analytics_autogen/
+*/test_application_logic_autogen/
+*/test_db_manager_autogen/
+
+# Editor/IDE temp files
+*.swp
+*.swo
+*~
+.DS_Store
+.idea/
+.vscode/
+*.user
+*.user.*
+
+# Logs/reports
+*.log
 TEST_RESULTS.md
 QUICK_REFERENCE.md
 DEVELOPMENT_PROCESS.md
+
+# Project script
+build.sh
+run_tests.sh
+
+# Optional local cmake/do not track
+/.qodo
+/.github

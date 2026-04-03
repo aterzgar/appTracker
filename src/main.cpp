@@ -15,9 +15,9 @@ int main(int argc, char *argv[])
     std::string dbFileName = config["database_file"];
     
     // Set application properties
-    app.setApplicationName("APP Application Tracker");
+    app.setApplicationName("ApplicationTracker");
     app.setApplicationVersion("2.0");
-    app.setOrganizationName("APP Tracker");
+    app.setOrganizationName("APP-Tracker");
     
     // Set a modern style
     app.setStyle(QStyleFactory::create("Fusion"));

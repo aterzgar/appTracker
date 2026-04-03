@@ -3,13 +3,14 @@
 
 #include <string>
 #include <vector>
+#include <utility>
 #include <sqlite3.h>
 
-/**
- * @brief Data structure for a single job application record.
- */
+// ---------------------------------------------------------------------------
+// Application – plain data record
+// ---------------------------------------------------------------------------
 struct Application {
-    int id = 0;
+    int         id              = 0;
     std::string companyName;
     std::string applicationDate;
     std::string position;
@@ -18,37 +19,69 @@ struct Application {
     std::string notes;
 };
 
-/**
- * @brief Handles SQLite storage and retrieval for job applications.
- */
+// ---------------------------------------------------------------------------
+// DatabaseManager – thin SQLite wrapper
+//
+// Responsibilities:
+//   • Lifecycle  : open / close the database file
+//   • Schema     : create tables, indexes, schema-version tracking
+//   • CRUD       : add / get / update / delete Application rows
+//   • Queries    : search, status counts, total count
+//
+// NOT responsible for:
+//   • Business validation (done in ApplicationService)
+//   • Duplicate detection at the business level (done in ApplicationService)
+// ---------------------------------------------------------------------------
 class DatabaseManager {
 public:
-    explicit DatabaseManager();
+    DatabaseManager();
     ~DatabaseManager();
 
+    // Non-copyable, non-movable (owns a raw sqlite3* handle)
+    DatabaseManager(const DatabaseManager&)            = delete;
+    DatabaseManager& operator=(const DatabaseManager&) = delete;
+
+    // --- Lifecycle ---
     bool openDatabase(const std::string& dbPath);
     void closeDatabase();
+    bool isOpen() const { return db != nullptr; }
 
+    // --- CRUD ---
     bool addApplication(const Application& app);
-    std::vector<Application> getAllApplications();
-    bool deleteApplication(int id);
     bool updateApplication(const Application& app);
+    bool deleteApplication(int id);
 
-    bool isValidDateTime(const std::string& date) const;
-    bool isDuplicateEntry(const Application& app) const;
-    
-    // Analytics methods
-    int getTotalApplications() const;
-    int getApplicationsByStatus(const std::string& status) const;
-    std::vector<std::pair<std::string, int>> getStatusCounts() const;
+    // --- Queries ---
+    std::vector<Application>                    getAllApplications() const;
+    std::vector<Application>                    searchApplications(const std::string& query) const;
+    std::vector<std::pair<std::string, int>>    getStatusCounts() const;
+    int                                         getTotalApplications() const;
+    int                                         getApplicationsByStatus(const std::string& status) const;
+    int                                         getInterviewsTotal() const;
+    bool                                        isDuplicateEntry(const Application& app) const;
+
+    // --- Validation helpers (pure, no DB access) ---
+    static bool isValidDate(const std::string& date);
+    static bool isValidDateTime(const std::string& dateTime);
+
+    // --- Schema versioning ---
+    bool getSchemaVersion(int& version) const;
+    bool setSchemaVersion(int version);
 
 private:
-    // Low-level table creation
+    // Schema
     bool createTables();
 
-    // Field binding helpers for queries
-    void bindCommonFields(sqlite3_stmt* stmt, const Application& app) const;
-    void bindCommonFieldsForDuplicate(sqlite3_stmt* stmt, const Application& app) const;
+    // Transaction helpers
+    bool beginTransaction();
+    bool commitTransaction();
+    bool rollbackTransaction();
+
+    // Bind helpers
+    void bindAppFields(sqlite3_stmt* stmt, const Application& app) const;
+
+    // Row reader
+    static Application readAppRow(sqlite3_stmt* stmt);
 
     sqlite3* db = nullptr;
 };

@@ -1,17 +1,29 @@
 #include "db_manager.h"
+
 #include <iostream>
 #include <regex>
-#include <memory>
 #include <QDate>
 #include <QString>
 
-// Helper RAII for sqlite3_stmt
-struct SqliteStatementGuard {
+// ---------------------------------------------------------------------------
+// RAII guard for sqlite3_stmt
+// ---------------------------------------------------------------------------
+struct StmtGuard {
     sqlite3_stmt* stmt = nullptr;
-    ~SqliteStatementGuard() { if (stmt) sqlite3_finalize(stmt); }
-    operator sqlite3_stmt*() { return stmt; }
-    sqlite3_stmt* operator->() { return stmt; }
+    explicit StmtGuard() = default;
+    ~StmtGuard() { if (stmt) sqlite3_finalize(stmt); }
+
+    // Convenience implicit conversions used by sqlite3_* C API
+    operator sqlite3_stmt*()  const { return stmt; }
+    sqlite3_stmt** operator&()      { return &stmt; }
+
+    StmtGuard(const StmtGuard&)            = delete;
+    StmtGuard& operator=(const StmtGuard&) = delete;
 };
+
+// ---------------------------------------------------------------------------
+// Constructor / Destructor
+// ---------------------------------------------------------------------------
 
 DatabaseManager::DatabaseManager() : db(nullptr) {}
 
@@ -19,313 +31,369 @@ DatabaseManager::~DatabaseManager() {
     closeDatabase();
 }
 
+// ---------------------------------------------------------------------------
+// Lifecycle
+// ---------------------------------------------------------------------------
+
 bool DatabaseManager::openDatabase(const std::string& dbPath) {
     closeDatabase();
-    
-    int rc = sqlite3_open(dbPath.c_str(), &db);
-    if (rc != SQLITE_OK) {  // More explicit check
-        std::cerr << "Can't open database: " << sqlite3_errmsg(db) << std::endl;
-        closeDatabase();  // This is good - cleans up even failed connection
-        return false;
-    }
-    
-    // Check if database is actually usable
-    if (!db) {
-        std::cerr << "Database handle is null after successful open" << std::endl;
-        return false;
-    }
-    
-    return createTables();
-}
 
-void DatabaseManager::closeDatabase() {
-    if (db) {
-        int rc = sqlite3_close(db);
-        if (rc != SQLITE_OK) {
-            std::cerr << "Error closing database: " << sqlite3_errmsg(db) << std::endl;
-            // Force close if regular close fails
-            sqlite3_close_v2(db);
-        }
-        db = nullptr;
+    if (sqlite3_open(dbPath.c_str(), &db) != SQLITE_OK) {
+        std::cerr << "Cannot open database: " << sqlite3_errmsg(db) << '\n';
+        closeDatabase();
+        return false;
     }
-}
 
-bool DatabaseManager::createTables() {
-    // Use a transaction to ensure all tables and indexes are created atomically
-    char* errMsg = nullptr;
-    
-    // Begin transaction
-    int rc = sqlite3_exec(db, "BEGIN TRANSACTION", nullptr, nullptr, &errMsg);
-    if (rc != SQLITE_OK) {
-        std::cerr << "Failed to begin transaction: " << (errMsg ? errMsg : "Unknown error") << std::endl;
-        sqlite3_free(errMsg);
-        return false;
+    if (!createTables())    return false;
+
+    int version = 0;
+    if (!getSchemaVersion(version)) return false;
+
+    // Migration hook – increment kRequiredVersion when adding schema changes
+    constexpr int kRequiredVersion = 1;
+    if (version < kRequiredVersion) {
+        if (!setSchemaVersion(kRequiredVersion)) return false;
     }
-    
-    // Create main table
-    const char* createTableSql =
-        "CREATE TABLE IF NOT EXISTS APPLICATION_TRACKER("
-        "ID INTEGER PRIMARY KEY AUTOINCREMENT,"
-        "COMPANY_NAME TEXT NOT NULL,"
-        "APPLICATION_DATE TEXT NOT NULL,"
-        "POSITION TEXT NOT NULL,"
-        "CONTACT_PERSON TEXT NOT NULL,"
-        "STATUS TEXT,"
-        "NOTES TEXT);";
-    
-    rc = sqlite3_exec(db, createTableSql, nullptr, nullptr, &errMsg);
-    if (rc != SQLITE_OK) {
-        std::cerr << "Failed to create table: " << (errMsg ? errMsg : "Unknown error") << std::endl;
-        sqlite3_free(errMsg);
-        sqlite3_exec(db, "ROLLBACK", nullptr, nullptr, nullptr);
-        return false;
-    }
-    
-    // Create indexes for better query performance
-    const char* createIndexesSql[] = {
-        "CREATE INDEX IF NOT EXISTS idx_company_name ON APPLICATION_TRACKER(COMPANY_NAME);",
-        "CREATE INDEX IF NOT EXISTS idx_status ON APPLICATION_TRACKER(STATUS);",
-        "CREATE INDEX IF NOT EXISTS idx_application_date ON APPLICATION_TRACKER(APPLICATION_DATE);",
-        "CREATE INDEX IF NOT EXISTS idx_position ON APPLICATION_TRACKER(POSITION);"
-    };
-    
-    for (const char* indexSql : createIndexesSql) {
-        rc = sqlite3_exec(db, indexSql, nullptr, nullptr, &errMsg);
-        if (rc != SQLITE_OK) {
-            std::cerr << "Failed to create index: " << (errMsg ? errMsg : "Unknown error") << std::endl;
-            sqlite3_free(errMsg);
-            sqlite3_exec(db, "ROLLBACK", nullptr, nullptr, nullptr);
-            return false;
-        }
-    }
-    
-    // Commit transaction
-    rc = sqlite3_exec(db, "COMMIT", nullptr, nullptr, &errMsg);
-    if (rc != SQLITE_OK) {
-        std::cerr << "Failed to commit transaction: " << (errMsg ? errMsg : "Unknown error") << std::endl;
-        sqlite3_free(errMsg);
-        return false;
-    }
-    
+
     return true;
 }
 
+void DatabaseManager::closeDatabase() {
+    if (!db) return;
+
+    if (sqlite3_close(db) != SQLITE_OK) {
+        std::cerr << "Error closing database: " << sqlite3_errmsg(db) << '\n';
+        sqlite3_close_v2(db); // force-close
+    }
+    db = nullptr;
+}
+
+// ---------------------------------------------------------------------------
+// Transaction helpers
+// ---------------------------------------------------------------------------
+
+bool DatabaseManager::beginTransaction() {
+    char* err = nullptr;
+    if (sqlite3_exec(db, "BEGIN TRANSACTION", nullptr, nullptr, &err) != SQLITE_OK) {
+        std::cerr << "BEGIN TRANSACTION failed: " << (err ? err : "?") << '\n';
+        sqlite3_free(err);
+        return false;
+    }
+    return true;
+}
+
+bool DatabaseManager::commitTransaction() {
+    char* err = nullptr;
+    if (sqlite3_exec(db, "COMMIT", nullptr, nullptr, &err) != SQLITE_OK) {
+        std::cerr << "COMMIT failed: " << (err ? err : "?") << '\n';
+        sqlite3_free(err);
+        rollbackTransaction();
+        return false;
+    }
+    return true;
+}
+
+bool DatabaseManager::rollbackTransaction() {
+    sqlite3_exec(db, "ROLLBACK", nullptr, nullptr, nullptr);
+    return false; // always returns false so callers can: return rollbackTransaction();
+}
+
+// ---------------------------------------------------------------------------
+// Schema
+// ---------------------------------------------------------------------------
+
+bool DatabaseManager::createTables() {
+    if (!beginTransaction()) return false;
+
+    // clang-format off
+    const char* kStatements[] = {
+        // Main table
+        "CREATE TABLE IF NOT EXISTS APPLICATION_TRACKER ("
+        "  ID               INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "  COMPANY_NAME     TEXT NOT NULL,"
+        "  APPLICATION_DATE TEXT NOT NULL,"
+        "  POSITION         TEXT NOT NULL,"
+        "  CONTACT_PERSON   TEXT NOT NULL,"
+        "  STATUS           TEXT NOT NULL CHECK(STATUS IN ("
+        "    'Applied','Interviews',"
+        "    'Offer Received','Rejected','Withdrawn')),"
+        "  NOTES            TEXT"
+        ");",
+
+        // Schema version table
+        "CREATE TABLE IF NOT EXISTS SCHEMA_VERSION (VERSION INTEGER NOT NULL);",
+        "INSERT OR IGNORE INTO SCHEMA_VERSION (VERSION) VALUES (1);",
+
+        // Indexes
+        "CREATE INDEX IF NOT EXISTS idx_company  ON APPLICATION_TRACKER(COMPANY_NAME);",
+        "CREATE INDEX IF NOT EXISTS idx_status   ON APPLICATION_TRACKER(STATUS);",
+        "CREATE INDEX IF NOT EXISTS idx_date     ON APPLICATION_TRACKER(APPLICATION_DATE);",
+        "CREATE INDEX IF NOT EXISTS idx_position ON APPLICATION_TRACKER(POSITION);",
+    };
+    // clang-format on
+
+    for (const char* sql : kStatements) {
+        char* err = nullptr;
+        if (sqlite3_exec(db, sql, nullptr, nullptr, &err) != SQLITE_OK) {
+            std::cerr << "Schema error: " << (err ? err : "?") << '\n';
+            sqlite3_free(err);
+            return rollbackTransaction();
+        }
+    }
+
+    return commitTransaction();
+}
+
+// ---------------------------------------------------------------------------
+// CRUD
+// ---------------------------------------------------------------------------
+
 bool DatabaseManager::addApplication(const Application& app) {
-    if (!isValidDateTime(app.applicationDate)) return false;
-    if (isDuplicateEntry(app)) return false;
+    if (!isValidDateTime(app.applicationDate)) {
+        std::cerr << "Validation error (add): invalid date or future date: " << app.applicationDate << '\n';
+        return false;
+    }
+
+    if (isDuplicateEntry(app)) {
+        std::cerr << "Validation error (add): duplicate application" << '\n';
+        return false;
+    }
+
+    if (!beginTransaction()) return false;
 
     const char* sql =
         "INSERT INTO APPLICATION_TRACKER "
         "(COMPANY_NAME, APPLICATION_DATE, POSITION, CONTACT_PERSON, STATUS, NOTES) "
         "VALUES (?, ?, ?, ?, ?, ?);";
 
-    SqliteStatementGuard stmt;
-    int rc = sqlite3_prepare_v2(db, sql, -1, &stmt.stmt, nullptr);
-
-    if (rc != SQLITE_OK) {
-        std::cerr << "SQL prepare error: " << sqlite3_errmsg(db) << std::endl;
-        return false;
+    StmtGuard stmt;
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt.stmt, nullptr) != SQLITE_OK) {
+        std::cerr << "Prepare error (add): " << sqlite3_errmsg(db) << '\n';
+        return rollbackTransaction();
     }
 
-    bindCommonFields(stmt, app);
+    bindAppFields(stmt, app);
 
-    rc = sqlite3_step(stmt);
-    return rc == SQLITE_DONE;
-}
-
-std::vector<Application> DatabaseManager::getAllApplications() {
-    std::vector<Application> applications;
-    const char* sql = "SELECT ID, COMPANY_NAME, APPLICATION_DATE, POSITION, CONTACT_PERSON, STATUS, NOTES FROM APPLICATION_TRACKER ORDER BY ID DESC;";
-
-    SqliteStatementGuard stmt;
-    int rc = sqlite3_prepare_v2(db, sql, -1, &stmt.stmt, nullptr);
-
-    if (rc != SQLITE_OK) {
-        std::cerr << "SQL prepare error: " << sqlite3_errmsg(db) << std::endl;
-        return applications;
+    if (sqlite3_step(stmt) != SQLITE_DONE) {
+        std::cerr << "Step error (add): " << sqlite3_errmsg(db) << '\n';
+        return rollbackTransaction();
     }
 
-    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
-        Application app;
-        app.id = sqlite3_column_int(stmt, 0);
-        app.companyName   = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
-        app.applicationDate = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
-        app.position      = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
-        app.contactPerson = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4));
-        app.status        = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 5));
-        app.notes         = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 6));
-        applications.push_back(std::move(app));
-    }
-
-    return applications;
-}
-
-bool DatabaseManager::deleteApplication(int id) {
-    const char* sql = "DELETE FROM APPLICATION_TRACKER WHERE ID = ?;";
-    SqliteStatementGuard stmt;
-    int rc = sqlite3_prepare_v2(db, sql, -1, &stmt.stmt, nullptr);
-
-    if (rc != SQLITE_OK) {
-        std::cerr << "SQL prepare error: " << sqlite3_errmsg(db) << std::endl;
-        return false;
-    }
-
-    sqlite3_bind_int(stmt, 1, id);
-    rc = sqlite3_step(stmt);
-
-    return rc == SQLITE_DONE;
+    return commitTransaction();
 }
 
 bool DatabaseManager::updateApplication(const Application& app) {
-    if (!isValidDateTime(app.applicationDate)) return false;
-
-    const char* sql =
-        "UPDATE APPLICATION_TRACKER SET "
-        "COMPANY_NAME = ?, APPLICATION_DATE = ?, POSITION = ?, CONTACT_PERSON = ?, STATUS = ?, NOTES = ? "
-        "WHERE ID = ?;";
-
-    SqliteStatementGuard stmt;
-    int rc = sqlite3_prepare_v2(db, sql, -1, &stmt.stmt, nullptr);
-
-    if (rc != SQLITE_OK) {
-        std::cerr << "SQL prepare error: " << sqlite3_errmsg(db) << std::endl;
+    if (!isValidDateTime(app.applicationDate)) {
+        std::cerr << "Validation error (update): invalid date or future date: " << app.applicationDate << '\n';
         return false;
     }
 
-    bindCommonFields(stmt, app);
+    if (!beginTransaction()) return false;
+
+    const char* sql =
+        "UPDATE APPLICATION_TRACKER "
+        "SET COMPANY_NAME=?, APPLICATION_DATE=?, POSITION=?, CONTACT_PERSON=?, STATUS=?, NOTES=? "
+        "WHERE ID=?;";
+
+    StmtGuard stmt;
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt.stmt, nullptr) != SQLITE_OK) {
+        std::cerr << "Prepare error (update): " << sqlite3_errmsg(db) << '\n';
+        return rollbackTransaction();
+    }
+
+    bindAppFields(stmt, app);
     sqlite3_bind_int(stmt, 7, app.id);
 
-    rc = sqlite3_step(stmt);
+    if (sqlite3_step(stmt) != SQLITE_DONE) {
+        std::cerr << "Step error (update): " << sqlite3_errmsg(db) << '\n';
+        return rollbackTransaction();
+    }
 
-    return rc == SQLITE_DONE;
+    return commitTransaction();
 }
 
-bool DatabaseManager::isValidDateTime(const std::string& date) const {
-    // Year: 0000-9999, Month: 01-12, Day: 01-31 (basic format check)
-    const std::regex pattern(R"(^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$)");
-    
-    // First check if format is valid
-    if (!std::regex_match(date, pattern)) {
-        return false;
+bool DatabaseManager::deleteApplication(int id) {
+    if (!beginTransaction()) return false;
+
+    const char* sql = "DELETE FROM APPLICATION_TRACKER WHERE ID=?;";
+
+    StmtGuard stmt;
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt.stmt, nullptr) != SQLITE_OK) {
+        std::cerr << "Prepare error (delete): " << sqlite3_errmsg(db) << '\n';
+        return rollbackTransaction();
     }
-    
-    // Check if date is not in the future
-    QDate applicationDate = QDate::fromString(QString::fromStdString(date), Qt::ISODate);
-    QDate currentDate = QDate::currentDate();
-    
-    if (applicationDate > currentDate) {
-        return false;  // Reject future dates
+
+    sqlite3_bind_int(stmt, 1, id);
+
+    if (sqlite3_step(stmt) != SQLITE_DONE) {
+        std::cerr << "Step error (delete): " << sqlite3_errmsg(db) << '\n';
+        return rollbackTransaction();
     }
-    
-    // Optional: Check if it's a valid calendar date (e.g., not Feb 30th)
-    if (!applicationDate.isValid()) {
-        return false;
-    }
-    
-    return true;
+
+    return commitTransaction();
 }
 
-bool DatabaseManager::isDuplicateEntry(const Application& app) const {
+// ---------------------------------------------------------------------------
+// Queries
+// ---------------------------------------------------------------------------
+
+std::vector<Application> DatabaseManager::getAllApplications() const {
     const char* sql =
-        "SELECT COUNT(*) FROM APPLICATION_TRACKER WHERE COMPANY_NAME = ? AND APPLICATION_DATE = ? AND POSITION = ? AND CONTACT_PERSON = ? AND STATUS = ?;";
+        "SELECT ID, COMPANY_NAME, APPLICATION_DATE, POSITION, CONTACT_PERSON, STATUS, NOTES "
+        "FROM APPLICATION_TRACKER ORDER BY ID DESC;";
 
-    SqliteStatementGuard stmt;
-    int rc = sqlite3_prepare_v2(db, sql, -1, &stmt.stmt, nullptr);
-
-    if (rc != SQLITE_OK) {
-        std::cerr << "SQL prepare error: " << sqlite3_errmsg(db) << std::endl;
-        return false; // treat as not duplicate but error
+    StmtGuard stmt;
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt.stmt, nullptr) != SQLITE_OK) {
+        std::cerr << "Prepare error (getAll): " << sqlite3_errmsg(db) << '\n';
+        return {};
     }
 
-    bindCommonFieldsForDuplicate(stmt, app);
+    std::vector<Application> results;
+    while (sqlite3_step(stmt) == SQLITE_ROW)
+        results.push_back(readAppRow(stmt));
+    return results;
+}
 
-    int count = 0;
-    if (sqlite3_step(stmt) == SQLITE_ROW) {
-        count = sqlite3_column_int(stmt, 0);
+std::vector<Application> DatabaseManager::searchApplications(const std::string& query) const {
+    const char* sql =
+        "SELECT ID, COMPANY_NAME, APPLICATION_DATE, POSITION, CONTACT_PERSON, STATUS, NOTES "
+        "FROM APPLICATION_TRACKER "
+        "WHERE COMPANY_NAME LIKE ? OR POSITION LIKE ? OR CONTACT_PERSON LIKE ? "
+        "   OR STATUS LIKE ? OR NOTES LIKE ? OR APPLICATION_DATE LIKE ? "
+        "ORDER BY ID DESC;";
+
+    StmtGuard stmt;
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt.stmt, nullptr) != SQLITE_OK) {
+        std::cerr << "Prepare error (search): " << sqlite3_errmsg(db) << '\n';
+        return {};
     }
 
-    return count > 0;
+    const std::string wildcard = "%" + query + "%";
+    for (int i = 1; i <= 6; ++i)
+        sqlite3_bind_text(stmt, i, wildcard.c_str(), -1, SQLITE_TRANSIENT);
+
+    std::vector<Application> results;
+    while (sqlite3_step(stmt) == SQLITE_ROW)
+        results.push_back(readAppRow(stmt));
+    return results;
 }
 
 int DatabaseManager::getTotalApplications() const {
     const char* sql = "SELECT COUNT(*) FROM APPLICATION_TRACKER;";
-    
-    SqliteStatementGuard stmt;
-    int rc = sqlite3_prepare_v2(db, sql, -1, &stmt.stmt, nullptr);
-    
-    if (rc != SQLITE_OK) {
-        std::cerr << "SQL prepare error: " << sqlite3_errmsg(db) << std::endl;
-        return 0;
-    }
-    
-    int count = 0;
-    if (sqlite3_step(stmt) == SQLITE_ROW) {
-        count = sqlite3_column_int(stmt, 0);
-    }
-    
-    return count;
+    StmtGuard stmt;
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt.stmt, nullptr) != SQLITE_OK) return 0;
+    return (sqlite3_step(stmt) == SQLITE_ROW) ? sqlite3_column_int(stmt, 0) : 0;
 }
 
 int DatabaseManager::getApplicationsByStatus(const std::string& status) const {
-    const char* sql = "SELECT COUNT(*) FROM APPLICATION_TRACKER WHERE STATUS = ?;";
-    
-    SqliteStatementGuard stmt;
-    int rc = sqlite3_prepare_v2(db, sql, -1, &stmt.stmt, nullptr);
-    
-    if (rc != SQLITE_OK) {
-        std::cerr << "SQL prepare error: " << sqlite3_errmsg(db) << std::endl;
-        return 0;
-    }
-    
+    const char* sql = "SELECT COUNT(*) FROM APPLICATION_TRACKER WHERE STATUS=?;";
+    StmtGuard stmt;
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt.stmt, nullptr) != SQLITE_OK) return 0;
     sqlite3_bind_text(stmt, 1, status.c_str(), -1, SQLITE_TRANSIENT);
-    
-    int count = 0;
-    if (sqlite3_step(stmt) == SQLITE_ROW) {
-        count = sqlite3_column_int(stmt, 0);
-    }
-    
-    return count;
+    return (sqlite3_step(stmt) == SQLITE_ROW) ? sqlite3_column_int(stmt, 0) : 0;
 }
 
-std::vector<std::pair<std::string, int>> DatabaseManager::getStatusCounts() const {
-    std::vector<std::pair<std::string, int>> statusCounts;
-    const char* sql = "SELECT STATUS, COUNT(*) FROM APPLICATION_TRACKER GROUP BY STATUS ORDER BY COUNT(*) DESC;";
-    
-    SqliteStatementGuard stmt;
-    int rc = sqlite3_prepare_v2(db, sql, -1, &stmt.stmt, nullptr);
-    
-    if (rc != SQLITE_OK) {
-        std::cerr << "SQL prepare error: " << sqlite3_errmsg(db) << std::endl;
-        return statusCounts;
-    }
-    
-    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
-        std::string status = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
-        int count = sqlite3_column_int(stmt, 1);
-        statusCounts.emplace_back(status, count);
-    }
-    
-    return statusCounts;
+int DatabaseManager::getInterviewsTotal() const {
+    // Historical tests expect a specialized method to return the total
+    // number of applications currently in the "Interviews" status.
+    return getApplicationsByStatus("Interviews");
 }
 
-// ---------- Private helper definitions ----------
+bool DatabaseManager::isDuplicateEntry(const Application& app) const {
+    const char* sql = "SELECT COUNT(*) FROM APPLICATION_TRACKER "
+                      "WHERE COMPANY_NAME=? AND APPLICATION_DATE=? AND POSITION=? "
+                      "AND CONTACT_PERSON=? AND STATUS=? AND NOTES=?;";
+    StmtGuard stmt;
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt.stmt, nullptr) != SQLITE_OK) return false;
 
-/**
- * Helper to bind the six main fields in the same order as all common queries, except for ID.
- */
-void DatabaseManager::bindCommonFields(sqlite3_stmt* stmt, const Application& app) const {
     sqlite3_bind_text(stmt, 1, app.companyName.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_text(stmt, 2, app.applicationDate.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_text(stmt, 3, app.position.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_text(stmt, 4, app.contactPerson.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_text(stmt, 5, app.status.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_text(stmt, 6, app.notes.c_str(), -1, SQLITE_TRANSIENT);
+
+    int count = (sqlite3_step(stmt) == SQLITE_ROW) ? sqlite3_column_int(stmt, 0) : 0;
+    return count > 0;
 }
 
-void DatabaseManager::bindCommonFieldsForDuplicate(sqlite3_stmt* stmt, const Application& app) const {
-    sqlite3_bind_text(stmt, 1, app.companyName.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 2, app.applicationDate.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 3, app.position.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 4, app.contactPerson.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 5, app.status.c_str(), -1, SQLITE_TRANSIENT);
+std::vector<std::pair<std::string, int>> DatabaseManager::getStatusCounts() const {
+    const char* sql =
+        "SELECT STATUS, COUNT(*) FROM APPLICATION_TRACKER "
+        "GROUP BY STATUS ORDER BY COUNT(*) DESC;";
+
+    StmtGuard stmt;
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt.stmt, nullptr) != SQLITE_OK) return {};
+
+    std::vector<std::pair<std::string, int>> counts;
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        std::string s = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
+        int         c = sqlite3_column_int(stmt, 1);
+        counts.emplace_back(std::move(s), c);
+    }
+    return counts;
+}
+
+// ---------------------------------------------------------------------------
+// Validation (static, no DB access)
+// ---------------------------------------------------------------------------
+
+bool DatabaseManager::isValidDate(const std::string& date) {
+    static const std::regex kPattern(
+        R"(^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$)");
+
+    if (!std::regex_match(date, kPattern)) return false;
+
+    QDate d = QDate::fromString(QString::fromStdString(date), Qt::ISODate);
+    return d.isValid() && d <= QDate::currentDate();
+}
+bool DatabaseManager::isValidDateTime(const std::string& dateTime) {
+    // Alias for historical naming (used by tests and older code paths)
+    return isValidDate(dateTime);
+}
+// ---------------------------------------------------------------------------
+// Schema versioning
+// ---------------------------------------------------------------------------
+
+bool DatabaseManager::getSchemaVersion(int& version) const {
+    version = 0;
+    const char* sql = "SELECT VERSION FROM SCHEMA_VERSION LIMIT 1;";
+    StmtGuard stmt;
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt.stmt, nullptr) != SQLITE_OK) return false;
+    if (sqlite3_step(stmt) != SQLITE_ROW) return false;
+    version = sqlite3_column_int(stmt, 0);
+    return true;
+}
+
+bool DatabaseManager::setSchemaVersion(int version) {
+    const char* sql = "UPDATE SCHEMA_VERSION SET VERSION=?;";
+    StmtGuard stmt;
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt.stmt, nullptr) != SQLITE_OK) return false;
+    sqlite3_bind_int(stmt, 1, version);
+    return sqlite3_step(stmt) == SQLITE_DONE;
+}
+
+// ---------------------------------------------------------------------------
+// Private helpers
+// ---------------------------------------------------------------------------
+
+void DatabaseManager::bindAppFields(sqlite3_stmt* stmt, const Application& app) const {
+    sqlite3_bind_text(stmt, 1, app.companyName.c_str(),      -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 2, app.applicationDate.c_str(),  -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 3, app.position.c_str(),         -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 4, app.contactPerson.c_str(),    -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 5, app.status.c_str(),           -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 6, app.notes.c_str(),            -1, SQLITE_TRANSIENT);
+}
+
+Application DatabaseManager::readAppRow(sqlite3_stmt* stmt) {
+    Application app;
+    app.id              = sqlite3_column_int (stmt, 0);
+    app.companyName     = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+    app.applicationDate = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
+    app.position        = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
+    app.contactPerson   = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4));
+    app.status          = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 5));
+    app.notes           = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 6));
+    return app;
 }

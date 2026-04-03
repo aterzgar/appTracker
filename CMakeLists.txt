@@ -22,11 +22,15 @@ set(SOURCES
     src/main.cpp
     src/mainwindow.cpp
     src/db_manager.cpp
+    src/application_service.cpp
+    src/analytics_visualizer.cpp
 )
 
 set(HEADERS
     src/mainwindow.h
     src/db_manager.h
+    src/application_service.h
+    src/analytics_visualizer.h
 )
 
 # Create executable

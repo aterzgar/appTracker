@@ -17,6 +17,8 @@ include_directories(../src)
 set(PROJECT_SOURCES
     ../src/db_manager.cpp
     ../src/mainwindow.cpp
+    ../src/application_service.cpp
+    ../src/analytics_visualizer.cpp
 )
 
 # 1. Database Manager Tests
@@ -58,15 +60,29 @@ set_target_properties(test_application_logic PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
 
+# 4. Application Service Tests
+add_executable(test_application_service test_application_service.cpp ${PROJECT_SOURCES})
+target_link_libraries(test_application_service
+    Qt5::Widgets
+    Qt5::Test
+    ${SQLITE3_LIBRARIES}
+)
+target_include_directories(test_application_service PRIVATE ${SQLITE3_INCLUDE_DIRS})
+target_compile_options(test_application_service PRIVATE ${SQLITE3_CFLAGS_OTHER})
+set_target_properties(test_application_service PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+)
+
 # Register tests with CTest
 enable_testing()
 add_test(NAME database_tests COMMAND ${CMAKE_BINARY_DIR}/bin/test_db_manager)
 add_test(NAME analytics_tests COMMAND ${CMAKE_BINARY_DIR}/bin/test_analytics)
 add_test(NAME application_logic_tests COMMAND ${CMAKE_BINARY_DIR}/bin/test_application_logic)
+add_test(NAME application_service_tests COMMAND ${CMAKE_BINARY_DIR}/bin/test_application_service)
 
 # Create a convenience target to run all tests
 add_custom_target(run_all_tests
     COMMAND ${CMAKE_CTEST_COMMAND} --verbose
-    DEPENDS test_db_manager test_analytics test_application_logic
+    DEPENDS test_db_manager test_analytics test_application_logic test_application_service
     COMMENT "Running all tests"
 )

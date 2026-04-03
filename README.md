@@ -20,7 +20,7 @@ Each job application tracks the following information:
 - **Application Date**: When you submitted the application
 - **Position**: The job title/position
 - **Contact Person**: Your point of contact at the company
-- **Status**: Current application status (Applied, Interview Scheduled, etc.)
+- **Status**: Current application status (Applied, Interviews, Offer Received, Rejected, Withdrawn)
 - **Notes**: Additional notes and comments
 
 ## Requirements
