@@ -10,16 +10,16 @@
 
 BUILD_DIR = build
 
-.PHONY: all run test clean rebuild
+.PHONY: all run test clean rebuild configure
 
-all: configure build
+all: build
 
 configure:
 	@mkdir -p $(BUILD_DIR)
 	@cd $(BUILD_DIR) && cmake ..
 
-build:
-	@$(MAKE) -C $(BUILD_DIR)
+build: configure
+	@$(MAKE) -C $(BUILD_DIR) --no-print-directory
 
 run: all
 	@echo ""

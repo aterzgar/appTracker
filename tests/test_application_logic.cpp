@@ -204,12 +204,13 @@ void TestApplicationLogic::testAnalyticsDialog()
 {
     // Create a mock database manager for testing
     DatabaseManager dbManager;
-    
+
     // IMPORTANT: Open the database before using it!
     QVERIFY(dbManager.openDatabase(":memory:")); // Use in-memory database for tests
-    
+
     ApplicationService appService(&dbManager);
-    AnalyticsDialog dialog(&appService);
+    LLMClient llmClient;
+    AnalyticsDialog dialog(&appService, &llmClient);
     
     // Check dialog properties
     QCOMPARE(dialog.windowTitle(), QString("Application Analytics"));
