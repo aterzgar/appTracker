@@ -5,6 +5,9 @@
 #include <QNetworkReply>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonArray>
+#include <QEventLoop>
+#include <QTimer>
 
 // ---------------------------------------------------------------------------
 // Construction / Destruction
@@ -33,7 +36,51 @@ void LLMClient::setModel(const QString& model) {
 }
 
 bool LLMClient::isConfigured() const {
-    return true;  // Ollama runs locally — always ready
+    // Use a temporary QNetworkAccessManager so the /api/tags check
+    // doesn't trigger onReplyFinished (which is connected to m_network).
+    QNetworkAccessManager checker;
+    QNetworkReply* reply = checker.get(
+        QNetworkRequest(QUrl("http://localhost:11434/api/tags")));
+
+    QEventLoop loop;
+    QTimer timer;
+    timer.setSingleShot(true);
+    QObject::connect(reply, &QNetworkReply::finished,
+                     &loop, &QEventLoop::quit);
+    QObject::connect(&timer, &QTimer::timeout,
+                     reply, &QNetworkReply::abort);
+    timer.start(2000);
+    loop.exec();
+    // loop.exec() blocks until the reply finishes or times out, so
+    // by the time we reach here the reply is already done and
+    // 'checker' can be safely destroyed.
+
+    if (reply->error() != QNetworkReply::NoError) {
+        reply->deleteLater();
+        return false;
+    }
+
+    // Parse /api/tags and verify the requested model is available.
+    const QString desired = m_model.isEmpty() ? "llama3.2" : m_model;
+    bool found = false;
+
+    try {
+        const QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
+        if (doc.isObject() && doc.object().contains("models")) {
+            for (const QJsonValue& v : doc.object()["models"].toArray()) {
+                QString name = v.toObject().value("name").toString();
+                if (name.endsWith(":latest")) name.chop(7);
+                QString wanted = desired;
+                if (wanted.endsWith(":latest")) wanted.chop(7);
+                if (name == wanted) { found = true; break; }
+            }
+        }
+    } catch (...) {
+        found = false;
+    }
+
+    reply->deleteLater();
+    return found;
 }
 
 // ---------------------------------------------------------------------------
@@ -67,7 +114,7 @@ void LLMClient::sendRequest(const QString& prompt) {
     QJsonObject payload;
     payload["model"] = model;
     payload["prompt"] = QString("%1\n\n%2").arg(SYSTEM_INSTRUCTION, prompt);
-    payload["stream"] = false;  // single response, no streaming
+    payload["stream"] = false;
 
     QJsonDocument doc(payload);
     m_reply = m_network->post(request, doc.toJson(QJsonDocument::Compact));
@@ -78,6 +125,14 @@ void LLMClient::sendRequest(const QString& prompt) {
 // ---------------------------------------------------------------------------
 
 void LLMClient::onReplyFinished(QNetworkReply* reply) {
+    // Ignore /api/tags responses — those are handled by isConfigured()
+    // using its own temporary manager.
+    if (reply->url().path() == "/api/tags") {
+        reply->deleteLater();
+        return;
+    }
+
+    // /api/generate response
     m_reply = reply;
 
     if (reply->error() != QNetworkReply::NoError) {
@@ -87,41 +142,33 @@ void LLMClient::onReplyFinished(QNetworkReply* reply) {
         return;
     }
 
-    try {
-        QString text = parseResponse(reply);
-
-        if (text.isEmpty()) {
-            emit errorOccurred("Received empty response from Ollama.");
-        } else {
-            emit insightsReady(text.trimmed());
-        }
-    } catch (const std::exception& e) {
-        emit errorOccurred(QString("Failed to parse response: %1").arg(e.what()));
-    } catch (...) {
-        emit errorOccurred("Unexpected error while parsing Ollama response.");
-    }
-
-    reply->deleteLater();
-    m_reply = nullptr;
-}
-
-// ---------------------------------------------------------------------------
-// Response parser – Ollama
-// ---------------------------------------------------------------------------
-
-QString LLMClient::parseResponse(QNetworkReply* reply) {
     const QByteArray raw = reply->readAll();
     const QJsonDocument doc = QJsonDocument::fromJson(raw);
     if (doc.isNull() || !doc.isObject()) {
-        throw std::runtime_error("Invalid JSON from Ollama");
+        emit errorOccurred("Invalid JSON from Ollama.");
+        reply->deleteLater();
+        m_reply = nullptr;
+        return;
     }
 
     const QJsonObject obj = doc.object();
 
     if (obj.contains("error")) {
-        throw std::runtime_error(
-            obj.value("error").toString().toStdString());
+        emit errorOccurred(QString("Ollama error: %1")
+            .arg(obj.value("error").toString()));
+        reply->deleteLater();
+        m_reply = nullptr;
+        return;
     }
 
-    return obj.value("response").toString();
+    QString text = obj.value("response").toString();
+    if (text.isEmpty()) {
+        emit errorOccurred("Received empty response from Ollama. "
+            "Model may still be loading — try again in a moment.");
+    } else {
+        emit insightsReady(text.trimmed());
+    }
+
+    reply->deleteLater();
+    m_reply = nullptr;
 }

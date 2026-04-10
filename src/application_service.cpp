@@ -321,7 +321,8 @@ bool ApplicationService::isDuplicate(const Application& app) const {
             existing.applicationDate == app.applicationDate &&
             existing.position        == app.position        &&
             existing.contactPerson   == app.contactPerson   &&
-            existing.status          == app.status)
+            existing.status          == app.status          &&
+            existing.notes           == app.notes)
         {
             return true;
         }

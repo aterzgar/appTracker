@@ -47,7 +47,6 @@ private slots:
 
 private:
     void sendRequest(const QString& prompt);
-    QString parseResponse(QNetworkReply* reply);
 
     QNetworkAccessManager* m_network = nullptr;
     QNetworkReply*         m_reply   = nullptr;
