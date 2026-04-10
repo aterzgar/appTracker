@@ -1,11 +1,12 @@
 # App Tracker
 
-A modern Qt-based desktop application to track job applications, visualise analytics, and get AI-powered insights via [Ollama](https://ollama.com) (local, unlimited, no API key needed).
+A modern Qt-based desktop application to track job applications, visualize analytics, and get AI-powered insights via [Ollama](https://ollama.com) (local, unlimited, no API key needed).
 
 ## Features
 
 - **Modern GUI** — Clean, dark-themed interface with sortable data table
 - **Full CRUD** — Add, edit, and delete applications with validation and duplicate detection
+- **Email Import** — Paste a job-application email and let AI extract company, position, date, and contact details
 - **Analytics Dashboard** — Pie charts, status summaries, and interview/rejection rates
 - **AI Insights** — One-click Ollama-powered recommendations based on your actual data
 - **Search & Sort** — Filter applications and sort by any column
@@ -72,11 +73,17 @@ Or simply run `./setup.sh` — it detects your distro and installs everything au
 2. Run Ollama: `ollama serve`
 3. Open **Analytics → Generate AI Insights** in the app
 
+## AI Privacy
+
+All AI processing runs locally via Ollama.
+No data is sent to external APIs or cloud services.
+
 ## Usage
 
 | Action | How |
 |---|---|
 | Add application | Click **+ New Application** and fill in the form |
+| Import from email | Click **Import Email** and paste the job-application email |
 | Edit application | Select a row → click **Edit** (or right-click → Edit) |
 | Delete application | Select a row → click **Delete** (confirms first) |
 | Refresh data | Click **Refresh** |
@@ -100,12 +107,13 @@ The database filename defaults to `applications.db` and can be overridden via th
 ```
 appTracker/
 ├── src/
-│   ├── main.cpp                 # Entry point
-│   ├── mainwindow.h/.cpp        # Main window + dialogs
-│   ├── db_manager.h/.cpp        # SQLite persistence layer
-│   ├── application_service.h/.cpp  # Business logic + prompt builder
-│   ├── analytics_visualizer.h/.cpp # Pie charts + summary widgets
-│   └── llm_client.h/.cpp        # Ollama API client
+│   ├── main.cpp                     # Entry point
+│   ├── mainwindow.h/.cpp            # Main window + dialogs
+│   ├── db_manager.h/.cpp            # SQLite persistence layer
+│   ├── application_service.h/.cpp   # Business logic + prompt builder
+│   ├── analytics_visualizer.h/.cpp  # Pie charts + summary widgets
+│   ├── llm_client.h/.cpp            # Ollama API client
+│   └── email_import_dialog.h/.cpp   # Email import + AI data extraction
 ├── tests/
 │   ├── test_db_manager.cpp
 │   ├── test_analytics.cpp
