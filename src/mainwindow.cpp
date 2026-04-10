@@ -1,4 +1,5 @@
 #include "mainwindow.h"
+#include "email_import_dialog.h"
 
 #include <QApplication>
 #include <QDir>
@@ -301,8 +302,8 @@ Application EditApplicationDialog::getApplication() const {
 // AnalyticsDialog
 // ===========================================================================
 
-AnalyticsDialog::AnalyticsDialog(ApplicationService* service, QWidget* parent)
-    : QDialog(parent), m_service(service), m_llmClient(new LLMClient(this))
+AnalyticsDialog::AnalyticsDialog(ApplicationService* service, LLMClient* llmClient, QWidget* parent)
+    : QDialog(parent), m_service(service), m_llmClient(llmClient ? llmClient : new LLMClient(this))
 {
     setWindowTitle("Application Analytics");
     resize(1000, 900);
@@ -368,7 +369,7 @@ void AnalyticsDialog::setupUI() {
 
     m_generateInsightsBtn = new QPushButton("Generate AI Insights", this);
     m_generateInsightsBtn->setToolTip("Analyze your application data and get AI-powered recommendations");
-    m_generateInsightsBtn->setEnabled(false); // enabled only when LLM is configured
+    m_generateInsightsBtn->setEnabled(m_llmClient && m_llmClient->isConfigured());
     insightsLayout->addWidget(m_generateInsightsBtn);
 
     m_insightsOutput = new QTextEdit(this);
@@ -555,12 +556,14 @@ void AnalyticsDialog::onInsightsError(const QString& error) {
 MainWindow::MainWindow(const QString& dbFileName, QWidget* parent)
     : QMainWindow(parent)
     , m_dbFileName(dbFileName)
+    , m_llmClient(new LLMClient(this))
     , m_settings("AppTracker", "AppTracker")
 {
     // --- LLM configuration (Ollama local) ---
     // Install: curl -fsSL https://ollama.com/install.sh | sh
     // Run:     ollama run llama3.2
-    m_settings.setValue("llm/model", "llama3.2");
+    const QString model = m_settings.value("llm/model", "llama3.2").toString();
+    m_llmClient->setModel(model);
 
     setupUI();
     // initDatabase() is deferred so the window is fully constructed first.
@@ -609,6 +612,7 @@ void MainWindow::setupToolbar() {
     m_deleteBtn    = new QPushButton("Delete",            this);
     m_refreshBtn   = new QPushButton("Refresh",           this);
     m_analyticsBtn = new QPushButton("Analytics",         this);
+    m_importEmailBtn = new QPushButton("📧 Import Email", this);
     m_exportBtn    = new QPushButton("Export CSV",        this);
 
     // Edit and Delete are disabled until the user selects a row.
@@ -638,6 +642,7 @@ void MainWindow::setupToolbar() {
     m_toolbarLayout->addWidget(makeSeparator(this));
     m_toolbarLayout->addWidget(m_refreshBtn);
     m_toolbarLayout->addWidget(m_analyticsBtn);
+    m_toolbarLayout->addWidget(m_importEmailBtn);
     m_toolbarLayout->addWidget(m_exportBtn);
     m_toolbarLayout->addStretch();
     m_toolbarLayout->addWidget(m_statusFilter);
@@ -729,6 +734,8 @@ void MainWindow::connectSignals() {
             this, &MainWindow::onShowAnalytics);
     connect(m_exportBtn,    &QPushButton::clicked,
             this, &MainWindow::onExportCsv);
+    connect(m_importEmailBtn, &QPushButton::clicked,
+            this, &MainWindow::onImportFromEmail);
 
     // Table signals
     connect(m_table, &QTableWidget::cellDoubleClicked,
@@ -945,14 +952,8 @@ void MainWindow::onShowAnalytics() {
         m_analyticsDialog->activateWindow();
         return;
     }
-    m_analyticsDialog = new AnalyticsDialog(m_service.get(), this);
+    m_analyticsDialog = new AnalyticsDialog(m_service.get(), m_llmClient, this);
     m_analyticsDialog->setAttribute(Qt::WA_DeleteOnClose);
-
-    // Pass LLM model from settings
-    m_analyticsDialog->configureLLM(
-        m_settings.value("llm/model").toString()
-    );
-
     m_analyticsDialog->show();
 }
 
@@ -1057,4 +1058,73 @@ void MainWindow::onSearchCommit() {
 
     populateTable(apps);
     updateToolbarState();
+}
+
+// ===========================================================================
+// MainWindow — email import
+// ===========================================================================
+
+void MainWindow::onImportFromEmail() {
+    if (!m_llmClient || !m_llmClient->isConfigured()) {
+        QMessageBox::warning(this, "LLM Unavailable",
+            "AI parsing requires Ollama to be running locally.\n\n"
+            "Install: curl -fsSL https://ollama.com/install.sh | sh\n"
+            "Run:     ollama run llama3.2");
+        return;
+    }
+
+    EmailImportDialog dlg(m_llmClient, this);
+    if (dlg.exec() != QDialog::Accepted || !dlg.hasValidData()) {
+        return;
+    }
+
+    Application app = dlg.getApplication();
+
+    // Check if this is a duplicate (same company + position + date + contact + status)
+    if (m_db.isDuplicateEntry(app)) {
+        const auto reply = QMessageBox::question(
+            this, "Duplicate Detected",
+            QString("An identical application for \"%1\" already exists.\n\n"
+                    "Would you like to update the existing one instead?")
+                .arg(QString::fromStdString(app.companyName)),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+
+        if (reply == QMessageBox::Yes) {
+            // Find the existing application and update it
+            const auto allApps = m_service->listApplications();
+            for (const auto& existing : allApps) {
+                if (existing.companyName == app.companyName &&
+                    existing.applicationDate == app.applicationDate &&
+                    existing.position == app.position &&
+                    existing.contactPerson == app.contactPerson &&
+                    existing.status == app.status) {
+                    app.id = existing.id;
+                    auto [ok, err] = m_service->updateApplication(app);
+                    if (ok) {
+                        onRefresh();
+                        statusBar()->showMessage(
+                            QString("Updated application for \"%1\".").arg(QString::fromStdString(app.companyName)),
+                            3000);
+                    } else {
+                        QMessageBox::warning(this, "Error", QString::fromStdString(err));
+                    }
+                    return;
+                }
+            }
+        } else {
+            return; // User chose not to update
+        }
+    }
+
+    // Add as new application
+    auto [ok, err] = m_service->addApplication(app);
+    if (ok) {
+        onRefresh();
+        statusBar()->showMessage(
+            QString("Imported application for \"%1\" from email.")
+                .arg(QString::fromStdString(app.companyName)),
+            3000);
+    } else {
+        QMessageBox::warning(this, "Error", QString::fromStdString(err));
+    }
 }

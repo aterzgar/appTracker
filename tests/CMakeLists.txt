@@ -20,6 +20,7 @@ set(PROJECT_SOURCES
     ../src/application_service.cpp
     ../src/analytics_visualizer.cpp
     ../src/llm_client.cpp
+    ../src/email_import_dialog.cpp
 )
 
 # 1. Database Manager Tests

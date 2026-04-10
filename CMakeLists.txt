@@ -25,6 +25,7 @@ set(SOURCES
     src/application_service.cpp
     src/analytics_visualizer.cpp
     src/llm_client.cpp
+    src/email_import_dialog.cpp
 )
 
 set(HEADERS
@@ -33,6 +34,7 @@ set(HEADERS
     src/application_service.h
     src/analytics_visualizer.h
     src/llm_client.h
+    src/email_import_dialog.h
 )
 
 # Create executable

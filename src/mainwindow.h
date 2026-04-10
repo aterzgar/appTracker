@@ -36,6 +36,7 @@
 #include "application_service.h"
 #include "analytics_visualizer.h"
 #include "llm_client.h"
+#include "email_import_dialog.h"
 
 // ---------------------------------------------------------------------------
 // Column indices — single source of truth; never use magic numbers elsewhere
@@ -135,7 +136,7 @@ private:
 class AnalyticsDialog : public QDialog {
     Q_OBJECT
 public:
-    explicit AnalyticsDialog(ApplicationService* service, QWidget* parent = nullptr);
+    explicit AnalyticsDialog(ApplicationService* service, LLMClient* llmClient, QWidget* parent = nullptr);
 
     // Pass LLM model from MainWindow's QSettings storage.
     void configureLLM(const QString& model = {});
@@ -203,6 +204,7 @@ private slots:
     void onRefresh();
     void onShowAnalytics();
     void onExportCsv();
+    void onImportFromEmail();
 
     // Table interactions
     void onTableDoubleClicked(int row, int column);
@@ -246,6 +248,7 @@ private:
     QPushButton* m_refreshBtn    = nullptr;
     QPushButton* m_analyticsBtn  = nullptr;
     QPushButton* m_exportBtn     = nullptr;
+    QPushButton* m_importEmailBtn = nullptr;
 
     // Search + filter
     QLineEdit* m_searchEdit     = nullptr;
@@ -270,6 +273,7 @@ private:
     QString                             m_dbFileName;
     DatabaseManager                     m_db;
     std::unique_ptr<ApplicationService> m_service;
+    LLMClient*                          m_llmClient = nullptr;
 
     // ---- Settings (column-width persistence) ----
     QSettings m_settings;
