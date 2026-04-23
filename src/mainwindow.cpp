@@ -422,7 +422,8 @@ std::map<std::string, int> AnalyticsDialog::aggregateInterviews(
         if (status == "Interviews") interviewTotal += count;
         else                        result[status]  = count;
     }
-    if (interviewTotal > 0) result["Interviews"] = interviewTotal;
+    // Always include the Interviews key so it doesn't disappear from UI when zero.
+    result["Interviews"] = interviewTotal;
     return result;
 }
 

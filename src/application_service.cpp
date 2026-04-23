@@ -70,9 +70,9 @@ ApplicationAnalytics ApplicationService::getAnalytics() const {
     if (!m_db) return a;
 
     a.total              = m_db->getTotalApplications();
-    a.rejected           = m_db->getApplicationsByStatus("Rejected");
-    a.interviews         = m_db->getApplicationsByStatus("Interviews");
-    a.offers             = m_db->getApplicationsByStatus("Offer Received");
+    a.rejected           = m_db->getApplicationsEverInStatus("Rejected");
+    a.interviews         = m_db->getApplicationsEverInStatus("Interviews");
+    a.offers             = m_db->getApplicationsEverInStatus("Offer Received");
     a.statusCounts       = m_db->getStatusCounts();
 
     return a;

@@ -57,6 +57,7 @@ public:
     std::vector<std::pair<std::string, int>>    getStatusCounts() const;
     int                                         getTotalApplications() const;
     int                                         getApplicationsByStatus(const std::string& status) const;
+    int                                         getApplicationsEverInStatus(const std::string& status) const;
     int                                         getInterviewsTotal() const;
     bool                                        isDuplicateEntry(const Application& app) const;
 
@@ -71,6 +72,9 @@ public:
 private:
     // Schema
     bool createTables();
+
+    // Status history logging (called internally on add/update)
+    bool logStatusChange(int applicationId, const std::string& newStatus, const std::string& oldStatus);
 
     // Transaction helpers
     bool beginTransaction();

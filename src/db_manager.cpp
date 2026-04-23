@@ -2,6 +2,8 @@
 
 #include <iostream>
 #include <regex>
+#include <ctime>
+#include <iomanip>
 #include <QDate>
 #include <QString>
 
@@ -99,6 +101,46 @@ bool DatabaseManager::rollbackTransaction() {
 }
 
 // ---------------------------------------------------------------------------
+// Status history logging
+// ---------------------------------------------------------------------------
+
+bool DatabaseManager::logStatusChange(int applicationId, const std::string& newStatus, const std::string& oldStatus) {
+    // Get current timestamp in ISO 8601 format
+    std::time_t now = std::time(nullptr);
+    std::tm localNow = {};
+#if defined(_WIN32)
+    localtime_s(&localNow, &now);
+#else
+    localtime_r(&now, &localNow);
+#endif
+
+    char timestamp[20];
+    std::strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", &localNow);
+
+    const char* sql =
+        "INSERT INTO STATUS_HISTORY (APPLICATION_ID, OLD_STATUS, NEW_STATUS, CHANGED_AT) "
+        "VALUES (?, ?, ?, ?);";
+
+    StmtGuard stmt;
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt.stmt, nullptr) != SQLITE_OK) {
+        std::cerr << "Prepare error (logStatusChange): " << sqlite3_errmsg(db) << '\n';
+        return false;
+    }
+
+    sqlite3_bind_int(stmt, 1, applicationId);
+    sqlite3_bind_text(stmt, 2, oldStatus.empty() ? nullptr : oldStatus.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 3, newStatus.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 4, timestamp, -1, SQLITE_TRANSIENT);
+
+    if (sqlite3_step(stmt) != SQLITE_DONE) {
+        std::cerr << "Step error (logStatusChange): " << sqlite3_errmsg(db) << '\n';
+        return false;
+    }
+
+    return true;
+}
+
+// ---------------------------------------------------------------------------
 // Schema
 // ---------------------------------------------------------------------------
 
@@ -120,6 +162,16 @@ bool DatabaseManager::createTables() {
         "  NOTES            TEXT"
         ");",
 
+        // Status history table
+        "CREATE TABLE IF NOT EXISTS STATUS_HISTORY ("
+        "  ID               INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "  APPLICATION_ID   INTEGER NOT NULL,"
+        "  OLD_STATUS       TEXT,"
+        "  NEW_STATUS       TEXT NOT NULL,"
+        "  CHANGED_AT       TEXT NOT NULL,"
+        "  FOREIGN KEY(APPLICATION_ID) REFERENCES APPLICATION_TRACKER(ID) ON DELETE CASCADE"
+        ");",
+
         // Schema version table
         "CREATE TABLE IF NOT EXISTS SCHEMA_VERSION (VERSION INTEGER NOT NULL);",
         "INSERT OR IGNORE INTO SCHEMA_VERSION (VERSION) VALUES (1);",
@@ -129,6 +181,8 @@ bool DatabaseManager::createTables() {
         "CREATE INDEX IF NOT EXISTS idx_status   ON APPLICATION_TRACKER(STATUS);",
         "CREATE INDEX IF NOT EXISTS idx_date     ON APPLICATION_TRACKER(APPLICATION_DATE);",
         "CREATE INDEX IF NOT EXISTS idx_position ON APPLICATION_TRACKER(POSITION);",
+        "CREATE INDEX IF NOT EXISTS idx_status_history_app_id ON STATUS_HISTORY(APPLICATION_ID);",
+        "CREATE INDEX IF NOT EXISTS idx_status_history_status ON STATUS_HISTORY(NEW_STATUS);",
     };
     // clang-format on
 
@@ -179,6 +233,15 @@ bool DatabaseManager::addApplication(const Application& app) {
         return rollbackTransaction();
     }
 
+    // Get the ID of the newly inserted row
+    int newId = static_cast<int>(sqlite3_last_insert_rowid(db));
+
+    // Log the initial status (no old status for new applications)
+    if (!logStatusChange(newId, app.status, "")) {
+        std::cerr << "Warning: failed to log initial status change for application " << newId << '\n';
+        // Don't fail the entire transaction for this, just log the warning
+    }
+
     return commitTransaction();
 }
 
@@ -189,6 +252,24 @@ bool DatabaseManager::updateApplication(const Application& app) {
     }
 
     if (!beginTransaction()) return false;
+
+    // First, get the old status so we can log the change
+    const char* selectSql = "SELECT STATUS FROM APPLICATION_TRACKER WHERE ID=?;";
+    StmtGuard selectStmt;
+    if (sqlite3_prepare_v2(db, selectSql, -1, &selectStmt.stmt, nullptr) != SQLITE_OK) {
+        std::cerr << "Prepare error (select old status): " << sqlite3_errmsg(db) << '\n';
+        return rollbackTransaction();
+    }
+    sqlite3_bind_int(selectStmt, 1, app.id);
+    
+    std::string oldStatus;
+    if (sqlite3_step(selectStmt) == SQLITE_ROW) {
+        const unsigned char* status = sqlite3_column_text(selectStmt, 0);
+        oldStatus = status ? reinterpret_cast<const char*>(status) : "";
+    } else {
+        std::cerr << "Could not find application with ID " << app.id << '\n';
+        return rollbackTransaction();
+    }
 
     const char* sql =
         "UPDATE APPLICATION_TRACKER "
@@ -207,6 +288,14 @@ bool DatabaseManager::updateApplication(const Application& app) {
     if (sqlite3_step(stmt) != SQLITE_DONE) {
         std::cerr << "Step error (update): " << sqlite3_errmsg(db) << '\n';
         return rollbackTransaction();
+    }
+
+    // Log status change if status actually changed
+    if (oldStatus != app.status) {
+        if (!logStatusChange(app.id, app.status, oldStatus)) {
+            std::cerr << "Warning: failed to log status change for application " << app.id << '\n';
+            // Don't fail the entire transaction for this, just log the warning
+        }
     }
 
     return commitTransaction();
@@ -293,6 +382,15 @@ int DatabaseManager::getApplicationsByStatus(const std::string& status) const {
     return (sqlite3_step(stmt) == SQLITE_ROW) ? sqlite3_column_int(stmt, 0) : 0;
 }
 
+int DatabaseManager::getApplicationsEverInStatus(const std::string& status) const {
+    // Count distinct applications that have EVER been in the specified status (from history)
+    const char* sql = "SELECT COUNT(DISTINCT APPLICATION_ID) FROM STATUS_HISTORY WHERE NEW_STATUS=?;";
+    StmtGuard stmt;
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt.stmt, nullptr) != SQLITE_OK) return 0;
+    sqlite3_bind_text(stmt, 1, status.c_str(), -1, SQLITE_TRANSIENT);
+    return (sqlite3_step(stmt) == SQLITE_ROW) ? sqlite3_column_int(stmt, 0) : 0;
+}
+
 int DatabaseManager::getInterviewsTotal() const {
     // Historical tests expect a specialized method to return the total
     // number of applications currently in the "Interviews" status.
@@ -318,19 +416,36 @@ bool DatabaseManager::isDuplicateEntry(const Application& app) const {
 }
 
 std::vector<std::pair<std::string, int>> DatabaseManager::getStatusCounts() const {
+    // Ensure the breakdown always contains all known statuses, even when count is zero.
+    const std::vector<std::string> knownStatuses = {
+        "Applied",
+        "Interviews",
+        "Offer Received",
+        "Rejected",
+        "Withdrawn"
+    };
+
+    std::map<std::string, int> countsMap;
+    for (const auto& s : knownStatuses) countsMap[s] = 0;
+
     const char* sql =
         "SELECT STATUS, COUNT(*) FROM APPLICATION_TRACKER "
-        "GROUP BY STATUS ORDER BY COUNT(*) DESC;";
+        "GROUP BY STATUS;";
 
     StmtGuard stmt;
-    if (sqlite3_prepare_v2(db, sql, -1, &stmt.stmt, nullptr) != SQLITE_OK) return {};
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt.stmt, nullptr) == SQLITE_OK) {
+        while (sqlite3_step(stmt) == SQLITE_ROW) {
+            const unsigned char* text = sqlite3_column_text(stmt, 0);
+            if (!text) continue;
+            std::string s = reinterpret_cast<const char*>(text);
+            int         c = sqlite3_column_int(stmt, 1);
+            countsMap[s] = c;
+        }
+    }
 
     std::vector<std::pair<std::string, int>> counts;
-    while (sqlite3_step(stmt) == SQLITE_ROW) {
-        std::string s = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
-        int         c = sqlite3_column_int(stmt, 1);
-        counts.emplace_back(std::move(s), c);
-    }
+    for (const auto& s : knownStatuses)
+        counts.emplace_back(s, countsMap[s]);
     return counts;
 }
 
